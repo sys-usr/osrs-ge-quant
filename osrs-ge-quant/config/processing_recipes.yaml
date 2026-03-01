@@ -1,0 +1,83 @@
+recipes:
+  - name: "Unicorn horn dust"
+    required_skill: "Herblore"
+    required_level: 5
+    inputs:
+      - { item_id: 237, qty: 1 }    # Unicorn horn
+    outputs:
+      - { item_id: 235, qty: 1 }    # Unicorn horn dust
+    extra_cost_gp: 0
+    xp_per_batch: 4
+    notes: "Pestle and mortar"
+
+  - name: "Clean ranarr"
+    required_skill: "Herblore"
+    required_level: 25
+    inputs:
+      - { item_id: 207, qty: 1 }    # Grimy ranarr
+    outputs:
+      - { item_id: 257, qty: 1 }    # Clean ranarr
+    extra_cost_gp: 0
+    xp_per_batch: 7.5
+
+  - name: "Oak plank"
+    required_skill: "Construction"
+    required_level: 15
+    inputs:
+      - { item_id: 1521, qty: 1 }   # Oak logs
+    outputs:
+      - { item_id: 8778, qty: 1 }   # Oak plank
+    extra_cost_gp: 250
+    xp_per_batch: 0
+    notes: "Assumes sawmill, ignore run cost"
+
+  - name: "Mahogany plank"
+    required_skill: "Construction"
+    required_level: 50
+    inputs:
+      - { item_id: 6332, qty: 1 }   # Mahogany logs
+    outputs:
+      - { item_id: 8782, qty: 1 }   # Mahogany plank
+    extra_cost_gp: 1500
+
+  - name: "Magic shortbow (u)"
+    required_skill: "Fletching"
+    required_level: 80
+    inputs:
+      - { item_id: 1513, qty: 1 }   # Magic logs
+    outputs:
+      - { item_id: 72, qty: 1 }     # Magic shortbow (u)
+    extra_cost_gp: 0
+    xp_per_batch: 83.25
+
+  - name: "Magic shortbow (strung)"
+    required_skill: "Fletching"
+    required_level: 80
+    inputs:
+      - { item_id: 72, qty: 1 }     # Magic shortbow (u)
+      - { item_id: 1777, qty: 1 }   # Bow string
+    outputs:
+      - { item_id: 861, qty: 1 }    # Magic shortbow
+    extra_cost_gp: 0
+    xp_per_batch: 86
+
+  - name: "Coal to Steel bar"
+    required_skill: "Smithing"
+    required_level: 30
+    inputs:
+      - { item_id: 440, qty: 1 }    # Iron ore
+      - { item_id: 453, qty: 2 }    # Coal
+    outputs:
+      - { item_id: 2353, qty: 1 }   # Steel bar
+    extra_cost_gp: 0
+    xp_per_batch: 17.5
+
+  - name: "Gold amulet (u)"
+    required_skill: "Crafting"
+    required_level: 8
+    inputs:
+      - { item_id: 2357, qty: 1 }   # Gold bar
+    outputs:
+      - { item_id: 1673, qty: 1 }   # Gold amulet (u)
+    extra_cost_gp: 0
+    xp_per_batch: 30

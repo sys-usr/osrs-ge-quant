@@ -1,0 +1,33 @@
+accounts:
+  - name: "Pimpwurt"
+    rsn: "Pimpwurt"
+    starting_gp: 200000000
+    active: true
+    role: "core_liquidity"
+
+  - name: "BrotherDangr"
+    rsn: "BrotherDangr"
+    starting_gp: 50000000
+    active: true
+    role: "flip_satellite"
+
+  - name: "beast774"
+    rsn: "beast774"
+    starting_gp: 50000000
+    active: true
+    role: "flip_satellite"
+
+  - name: "Noctusrex1"
+    rsn: "Noctusrex1"
+    starting_gp: 30000000
+    active: true
+    role: "processing"
+
+  - name: "Papik_21"
+    rsn: "Papik_21"
+    starting_gp: 30000000
+    active: true
+    role: "processing"
+
+cross_account:
+  transfer_fee_bps: 0
