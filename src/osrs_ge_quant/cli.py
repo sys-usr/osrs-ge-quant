@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime
+from pathlib import Path
 from typing import List
 
 # Local imports
@@ -20,6 +21,7 @@ from osrs_ge_quant.backtest import backtest_flip_strategy, sweep_backtests
 from osrs_ge_quant.screeners import run_zscore_screener
 from osrs_ge_quant.portfolio import load_open_positions, mark_to_market, summarize_portfolio
 from osrs_ge_quant.event_study import run_event_study
+from osrs_ge_quant.export import export_terminal_snapshot
 
 
 # --------------------------
@@ -288,6 +290,15 @@ def cmd_event_study(args):
         print(f"{d:+3d}\t{c*100:6.2f}")
 
 
+
+
+def cmd_export_terminal_snapshot(args):
+    output = export_terminal_snapshot(
+        output_path=args.output,
+        top_items=args.top_items,
+    )
+    print(f"[CLI] Wrote dashboard snapshot to: {output}")
+
 # --------------------------
 # Parser
 # --------------------------
@@ -386,6 +397,18 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--window-post", type=int, default=21)
     ev.add_argument("--timestep", default="1d_weirdgloop")
 
+    ex = sub.add_parser(
+        "export-terminal-snapshot",
+        help="Export JSON data for JS dashboard clients",
+    )
+    ex.add_argument(
+        "--output",
+        type=Path,
+        default=Path("artifacts/terminal_snapshot.json"),
+        help="Output JSON path",
+    )
+    ex.add_argument("--top-items", type=int, default=100)
+
     return p
 
 
@@ -413,6 +436,7 @@ def main():
         "fetch-news": cmd_fetch_news,
         "analyze-news": cmd_analyze_news,
         "event-study": cmd_event_study,
+        "export-terminal-snapshot": cmd_export_terminal_snapshot,
     }
 
     fn = commands.get(args.cmd)
