@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime
+from pathlib import Path
 from typing import List
 
 # Local imports
@@ -20,6 +21,7 @@ from osrs_ge_quant.backtest import backtest_flip_strategy, sweep_backtests
 from osrs_ge_quant.screeners import run_zscore_screener
 from osrs_ge_quant.portfolio import load_open_positions, mark_to_market, summarize_portfolio
 from osrs_ge_quant.event_study import run_event_study
+from osrs_ge_quant.export import export_terminal_snapshot
 
 
 # --------------------------
@@ -112,6 +114,15 @@ def cmd_skip_rec(args):
     session.commit()
     session.close()
     print(f"[CLI] Marked recommendation {args.rec_id} as skipped.")
+
+
+def cmd_api(args):
+    from osrs_ge_quant.api import create_app
+    import uvicorn
+
+    app = create_app()
+    print(f"[CLI] Starting API at http://{args.host}:{args.port} ...")
+    uvicorn.run(app, host=args.host, port=args.port, reload=args.reload)
 
 
 # --------------------------
@@ -288,6 +299,15 @@ def cmd_event_study(args):
         print(f"{d:+3d}\t{c*100:6.2f}")
 
 
+
+
+def cmd_export_terminal_snapshot(args):
+    output = export_terminal_snapshot(
+        output_path=args.output,
+        top_items=args.top_items,
+    )
+    print(f"[CLI] Wrote dashboard snapshot to: {output}")
+
 # --------------------------
 # Parser
 # --------------------------
@@ -310,6 +330,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("analyze", help="Run full analysis cycle and store recommendations")
     sub.add_parser("dashboard", help="Run the Dash web dashboard")
+
+    api = sub.add_parser("api", help="Run the FastAPI service for JS dashboards")
+    api.add_argument("--host", default="127.0.0.1")
+    api.add_argument("--port", type=int, default=8080)
+    api.add_argument("--reload", action="store_true")
 
     log = sub.add_parser("log-trade", help="Log a buy/sell in the database")
     log.add_argument("account", help="Account name (e.g. Main)")
@@ -386,6 +411,18 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--window-post", type=int, default=21)
     ev.add_argument("--timestep", default="1d_weirdgloop")
 
+    ex = sub.add_parser(
+        "export-terminal-snapshot",
+        help="Export JSON data for JS dashboard clients",
+    )
+    ex.add_argument(
+        "--output",
+        type=Path,
+        default=Path("artifacts/terminal_snapshot.json"),
+        help="Output JSON path",
+    )
+    ex.add_argument("--top-items", type=int, default=100)
+
     return p
 
 
@@ -404,6 +441,7 @@ def main():
         "cron-refresh": cmd_cron_refresh,
         "analyze": cmd_analyze,
         "dashboard": cmd_dashboard,
+        "api": cmd_api,
         "log-trade": cmd_log_trade,
         "skip-rec": cmd_skip_rec,
         "backtest": cmd_backtest,
@@ -413,6 +451,7 @@ def main():
         "fetch-news": cmd_fetch_news,
         "analyze-news": cmd_analyze_news,
         "event-study": cmd_event_study,
+        "export-terminal-snapshot": cmd_export_terminal_snapshot,
     }
 
     fn = commands.get(args.cmd)

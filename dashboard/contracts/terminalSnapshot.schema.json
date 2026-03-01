@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://osrs-ge-quant.local/schemas/terminalSnapshot.schema.json",
+  "title": "TerminalSnapshot",
+  "type": "object",
+  "required": ["meta", "accounts", "account_pnl", "recommendations", "liquid_items"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["top_items", "generator"],
+      "properties": {
+        "top_items": { "type": "integer", "minimum": 1 },
+        "generator": { "type": "string" }
+      }
+    },
+    "accounts": { "type": "array", "items": { "type": "object" } },
+    "account_pnl": { "type": "array", "items": { "type": "object" } },
+    "recommendations": { "type": "array", "items": { "type": "object" } },
+    "liquid_items": { "type": "array", "items": { "type": "object" } }
+  }
+}
