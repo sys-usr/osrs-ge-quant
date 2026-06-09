@@ -1,0 +1,1694 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSRS GE Quant - Day-Trading Terminal</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        osrs: {
+                            gold: '#dfb43a',
+                            'gold-hover': '#ffcc00',
+                            charcoal: '#121214',
+                            panel: '#1a1a1e',
+                            green: '#00cc66',
+                            red: '#ff3355',
+                            cyan: '#00e5ff'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: #0d0d10;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #121214;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #2b2b30;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="text-zinc-200 antialiased font-sans flex h-screen overflow-hidden">
+
+    <!-- SIDEBAR NAVIGATION -->
+    <aside class="w-64 bg-osrs-charcoal border-r border-zinc-800 flex flex-col shrink-0">
+        <div class="p-6 border-b border-zinc-800 flex items-center gap-3">
+            <div class="w-8 h-8 rounded bg-amber-500 flex items-center justify-center text-zinc-950 font-bold text-lg">Q</div>
+            <div>
+                <h1 class="font-bold text-sm tracking-wider text-zinc-100 uppercase">OSRS Quant</h1>
+                <p class="text-[10px] text-amber-500 font-mono tracking-widest uppercase font-semibold">Bloomberg Terminal</p>
+            </div>
+        </div>
+
+        <nav class="flex-1 p-4 space-y-1.5 overflow-y-auto custom-scrollbar">
+            <button onclick="switchTab('overview')" id="btn-overview" class="tab-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all bg-zinc-800 text-amber-500">
+                <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Overview Dashboard
+            </button>
+            <button onclick="switchTab('flips')" id="btn-flips" class="tab-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60">
+                <i data-lucide="refresh-cw" class="w-4 h-4"></i> Day-Trading Flips
+            </button>
+            <button onclick="switchTab('portfolio')" id="btn-portfolio" class="tab-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60">
+                <i data-lucide="briefcase" class="w-4 h-4"></i> Portfolio & Risk
+            </button>
+            <button onclick="switchTab('news')" id="btn-news" class="tab-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60">
+                <i data-lucide="newspaper" class="w-4 h-4"></i> News & Sentiment
+            </button>
+            <button onclick="switchTab('charts')" id="btn-charts" class="tab-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60">
+                <i data-lucide="line-chart" class="w-4 h-4"></i> Market Charts
+            </button>
+            <button onclick="switchTab('settings')" id="btn-settings" class="tab-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60">
+                <i data-lucide="sliders" class="w-4 h-4"></i> Settings & Accounts
+            </button>
+            <button onclick="switchTab('backtest')" id="btn-backtest" class="tab-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60">
+                <i data-lucide="history" class="w-4 h-4"></i> Backtest Engine
+            </button>
+        </nav>
+
+        <div class="p-4 border-t border-zinc-800 flex flex-col gap-2">
+            <div class="flex items-center justify-between text-[11px] text-zinc-500">
+                <span>SYSTEM STATUS:</span>
+                <span id="daemon-badge" class="flex items-center gap-1.5 text-zinc-500 font-bold">
+                    <span class="w-2 h-2 rounded-full bg-zinc-500"></span> STANDBY
+                </span>
+            </div>
+            <div class="flex items-center justify-between text-[11px] text-zinc-500">
+                <span>TIMESTEP:</span>
+                <span id="daemon-timestep" class="text-amber-500 font-semibold font-mono">5M Snapshot</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN APP WRAPPER -->
+    <main class="flex-1 flex flex-col min-w-0 overflow-hidden bg-zinc-950">
+        <!-- TOP NAVBAR -->
+        <header class="h-16 border-b border-zinc-900 flex items-center justify-between px-8 bg-osrs-charcoal shrink-0">
+            <div class="flex items-center gap-4">
+                <h2 id="current-tab-title" class="font-bold text-lg text-zinc-100 tracking-wide uppercase">Overview Dashboard</h2>
+            </div>
+            <div class="flex items-center gap-6">
+                <div class="text-sm font-mono text-zinc-500" id="utc-clock">UTC TIME: 00:00:00</div>
+                <button onclick="refreshDashboardData(true)" class="p-2 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg transition-all" title="Reload Dashboard">
+                    <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- CONTAINER FOR TAB SCREEN VIEWS -->
+        <div class="flex-1 overflow-y-auto p-8 custom-scrollbar relative">
+            <!-- Loading Spinner Overlay -->
+            <div id="loading-spinner" class="absolute inset-0 bg-zinc-950/80 flex items-center justify-center z-50 hidden">
+                <div class="flex flex-col items-center gap-4">
+                    <div class="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-sm font-mono text-amber-500 uppercase tracking-widest font-semibold">Running Process...</p>
+                </div>
+            </div>
+
+            <!-- Toast notification -->
+            <div id="toast-notif" class="fixed top-6 right-6 bg-zinc-900 border border-emerald-500/30 text-zinc-100 px-5 py-3.5 rounded-xl shadow-2xl z-55 flex items-center gap-3 transition-all duration-350 transform translate-x-80 opacity-0">
+                <i data-lucide="check-circle" class="text-emerald-500 w-5 h-5"></i>
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-wider" id="toast-title">Success</p>
+                    <p class="text-[11px] text-zinc-400 mt-0.5" id="toast-message">Action processed successfully.</p>
+                </div>
+            </div>
+
+            <!-- TAB: OVERVIEW -->
+            <section id="tab-overview-view" class="space-y-6">
+                <!-- METRIC CARDS -->
+                <div class="grid grid-cols-4 gap-6">
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Active Open Positions</p>
+                            <h3 id="stat-positions" class="text-3xl font-bold mt-2 font-mono text-zinc-100">0</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400">
+                            <i data-lucide="briefcase" class="w-6 h-6"></i>
+                        </div>
+                    </div>
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Total Portfolio Value</p>
+                            <h3 id="stat-mv" class="text-3xl font-bold mt-2 font-mono text-zinc-100">0 gp</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                            <i data-lucide="coins" class="w-6 h-6"></i>
+                        </div>
+                    </div>
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Unrealized P&L</p>
+                            <h3 id="stat-pnl" class="text-3xl font-bold mt-2 font-mono text-zinc-100">0 gp</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400" id="stat-pnl-icon-bg">
+                            <i data-lucide="trending-up" class="w-6 h-6"></i>
+                        </div>
+                    </div>
+                    <!-- Daemon Status Card -->
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Sentinel Sentry Loop</p>
+                                <p id="stat-daemon-heartbeat" class="text-xs font-mono text-zinc-400 mt-1">Last Update: Never</p>
+                            </div>
+                            <span id="overview-daemon-dot" class="w-3.5 h-3.5 rounded-full bg-zinc-500 shadow-lg animate-pulse"></span>
+                        </div>
+                        <button onclick="triggerDaemonCycle()" class="w-full mt-3 bg-amber-500 hover:bg-amber-600 text-zinc-950 font-bold py-1.5 rounded-lg text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/10">
+                            <i data-lucide="zap" class="w-3.5 h-3.5"></i> Run Update Cycle
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-12 gap-6">
+                    <!-- ACCOUNT STATS SUMMARY -->
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl col-span-4 flex flex-col">
+                        <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800/80 pb-3 flex items-center gap-2">
+                            <i data-lucide="users" class="w-4 h-4 text-amber-500"></i> Active Multi-Accounts
+                        </h3>
+                        <div class="flex-1 mt-4 overflow-y-auto max-h-[320px] custom-scrollbar">
+                            <table class="w-full text-left border-collapse text-xs">
+                                <thead>
+                                    <tr class="text-zinc-500 border-b border-zinc-850">
+                                        <th class="py-2.5">Account</th>
+                                        <th class="py-2.5">RSN</th>
+                                        <th class="py-2.5 text-right">Net Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="accounts-table-body" class="divide-y divide-zinc-850">
+                                    <!-- Rendered dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- RECENT HIGH QUALITY FLIPS -->
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl col-span-8 flex flex-col">
+                        <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+                            <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase flex items-center gap-2">
+                                <i data-lucide="zap" class="w-4 h-4 text-amber-500"></i> Top Live Trade Recommendations
+                            </h3>
+                            <button onclick="switchTab('flips')" class="text-xs font-semibold text-amber-500 hover:text-amber-400 flex items-center gap-1 transition-all">
+                                View Screener <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                        <div class="flex-1 mt-4 overflow-y-auto max-h-[320px] custom-scrollbar">
+                            <table class="w-full text-left border-collapse text-xs">
+                                <thead>
+                                    <tr class="text-zinc-500 border-b border-zinc-850">
+                                        <th class="py-2.5">Item Opportunity</th>
+                                        <th class="py-2.5 text-right">Price</th>
+                                        <th class="py-2.5 text-right">Effective Margin</th>
+                                        <th class="py-2.5 text-right font-semibold text-emerald-500">Expected Profit</th>
+                                        <th class="py-2.5 text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dashboard-recs-table-body" class="divide-y divide-zinc-850">
+                                    <!-- Rendered dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ALERTS AUDIT SENTRIES HISTORY -->
+                <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex flex-col">
+                    <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-3 flex items-center gap-2">
+                        <i data-lucide="bell" class="w-4 h-4 text-amber-500"></i> Sentinel Telegram / Discord Alert History (Last 24 Hours)
+                    </h3>
+                    <div class="mt-4 overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead>
+                                <tr class="text-zinc-500 border-b border-zinc-850">
+                                    <th class="py-2.5">Alert Timestamp</th>
+                                    <th class="py-2.5">Item Trigger</th>
+                                    <th class="py-2.5 text-right">Buy Target</th>
+                                    <th class="py-2.5 text-right">Expected Margin</th>
+                                    <th class="py-2.5 text-right text-emerald-500">Total Profit</th>
+                                    <th class="py-2.5">Technical Signal</th>
+                                </tr>
+                            </thead>
+                            <tbody id="notifications-table-body" class="divide-y divide-zinc-850">
+                                <!-- Rendered dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: DAY-TRADING FLIPS -->
+            <section id="tab-flips-view" class="space-y-6 hidden">
+                <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex flex-col">
+                    <div class="flex items-center justify-between border-b border-zinc-800 pb-4">
+                        <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase flex items-center gap-2">
+                            <i data-lucide="filter" class="w-4 h-4 text-amber-500"></i> Quantitative Flip Recommendations Screener
+                        </h3>
+                        <input type="text" id="flips-search" oninput="filterFlips()" placeholder="Filter items by name..." class="bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-1.5 rounded-lg text-xs w-64 focus:outline-none focus:border-amber-500 transition-all">
+                    </div>
+
+                    <div class="mt-4 overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-left border-collapse text-xs min-w-[900px]">
+                            <thead>
+                                <tr class="text-zinc-500 border-b border-zinc-850">
+                                    <th class="py-3 px-2">Generated At</th>
+                                    <th class="py-3 px-2">Item Opportunity</th>
+                                    <th class="py-3 px-2 text-right">Buy Target</th>
+                                    <th class="py-3 px-2 text-right">Limit Qty</th>
+                                    <th class="py-3 px-2 text-right">Unit Margin</th>
+                                    <th class="py-3 px-2 text-right font-mono text-zinc-400">Technical Indicators</th>
+                                    <th class="py-3 px-2 text-right text-emerald-500">Expected Profit</th>
+                                    <th class="py-3 px-2 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="flips-table-body" class="divide-y divide-zinc-850">
+                                <!-- Rendered dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: PORTFOLIO -->
+            <section id="tab-portfolio-view" class="space-y-6 hidden">
+                <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex flex-col">
+                    <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-4 flex items-center gap-2">
+                        <i data-lucide="briefcase" class="w-4 h-4 text-amber-500"></i> Active Holdings & Mark-To-Market Valuation
+                    </h3>
+
+                    <div class="mt-4 overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-left border-collapse text-xs min-w-[800px]">
+                            <thead>
+                                <tr class="text-zinc-500 border-b border-zinc-850">
+                                    <th class="py-3 px-2">Account Name</th>
+                                    <th class="py-3 px-2">Item</th>
+                                    <th class="py-3 px-2 text-right">Quantity Held</th>
+                                    <th class="py-3 px-2 text-right">Avg Cost</th>
+                                    <th class="py-3 px-2 text-right">Market Price</th>
+                                    <th class="py-3 px-2 text-right font-semibold">Total Market Value</th>
+                                    <th class="py-3 px-2 text-right font-semibold text-emerald-500">Unrealized P&L</th>
+                                    <th class="py-3 px-2 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="portfolio-table-body" class="divide-y divide-zinc-850">
+                                <!-- Rendered dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: NEWS -->
+            <section id="tab-news-view" class="grid grid-cols-2 gap-6 hidden">
+                <!-- GAME UPDATE ARTICLES -->
+                <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex flex-col">
+                    <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-3 flex items-center gap-2">
+                        <i data-lucide="newspaper" class="w-4 h-4 text-amber-500"></i> Jagex Official Update Sentries
+                    </h3>
+                    <div class="flex-1 mt-4 space-y-4 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar" id="official-news-container">
+                        <!-- Rendered dynamically -->
+                    </div>
+                </div>
+
+                <!-- REDDIT DISCUSSION SENTIMENTS -->
+                <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex flex-col">
+                    <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-3 flex items-center gap-2">
+                        <i data-lucide="message-square" class="w-4 h-4 text-amber-500"></i> r/2007scape & YouTube Sentiment
+                    </h3>
+                    <div class="flex-1 mt-4 space-y-4 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar" id="reddit-news-container">
+                        <!-- Rendered dynamically -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: CHARTS -->
+            <section id="tab-charts-view" class="grid grid-cols-12 gap-6 hidden">
+                <!-- SEARCH PANEL -->
+                <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl col-span-4 flex flex-col">
+                    <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-4 flex items-center gap-2">
+                        <i data-lucide="search" class="w-4 h-4 text-amber-500"></i> Item Search Engine
+                    </h3>
+                    
+                    <div class="mt-4 relative">
+                        <input type="text" id="chart-item-search" oninput="searchItems()" placeholder="Type item name..." class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:border-amber-500 transition-all font-sans">
+                        <div id="search-results-dropdown" class="absolute left-0 right-0 mt-2 bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl z-30 max-h-[220px] overflow-y-auto custom-scrollbar hidden">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <div id="chart-item-details" class="mt-6 space-y-4">
+                        <p class="text-zinc-500 text-xs italic">Select an item to display technical metadata and statistics.</p>
+                    </div>
+                </div>
+
+                <!-- PRICE GRAPH PANEL -->
+                <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl col-span-8 flex flex-col">
+                    <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-4 flex items-center gap-2">
+                        <i data-lucide="line-chart" class="w-4 h-4 text-amber-500"></i> Historical Price & volume timeseries
+                    </h3>
+                    <div class="flex-1 mt-4 relative min-h-[400px]">
+                        <canvas id="itemPriceChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: SETTINGS & ACCOUNTS -->
+            <section id="tab-settings-view" class="grid grid-cols-12 gap-6 hidden">
+                <!-- SUB-TABS LEFT BAR -->
+                <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-5 shadow-xl col-span-3 flex flex-col space-y-1.5 h-fit">
+                    <button onclick="switchSettingsSubtab('accounts')" id="subbtn-accounts" class="subtab-btn w-full text-left px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-zinc-800 text-amber-500">
+                        <i data-lucide="users" class="w-3.5 h-3.5 inline mr-2"></i> Trading Accounts
+                    </button>
+                    <button onclick="switchSettingsSubtab('blacklist')" id="subbtn-blacklist" class="subtab-btn w-full text-left px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850">
+                        <i data-lucide="slash" class="w-3.5 h-3.5 inline mr-2"></i> Street-Trade Blacklist
+                    </button>
+                    <button onclick="switchSettingsSubtab('params')" id="subbtn-params" class="subtab-btn w-full text-left px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850">
+                        <i data-lucide="settings" class="w-3.5 h-3.5 inline mr-2"></i> System Parameters
+                    </button>
+                </div>
+
+                <!-- CONTENT RIGHT PANEL -->
+                <div class="col-span-9 space-y-6">
+                    <!-- SUBTAB: ACCOUNTS -->
+                    <div id="subtab-accounts-panel" class="space-y-6">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase flex items-center gap-2">
+                                <i data-lucide="users" class="w-4 h-4 text-amber-500"></i> Active Trading Accounts configurations
+                            </h3>
+                            <button onclick="openAccountModal(null)" class="bg-amber-500 hover:bg-amber-600 text-zinc-950 px-4 py-2 rounded-lg text-xs font-bold transition-all uppercase flex items-center gap-1.5 shadow-lg shadow-amber-500/10">
+                                <i data-lucide="plus-circle" class="w-4 h-4"></i> Create Account
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-6" id="accounts-cards-container">
+                            <!-- Rendered dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- SUBTAB: BLACKLIST -->
+                    <div id="subtab-blacklist-panel" class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl space-y-4 hidden">
+                        <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-3 flex items-center gap-2">
+                            <i data-lucide="slash" class="w-4 h-4 text-amber-500"></i> Street-Trading Filter Blacklist
+                        </h3>
+                        <p class="text-xs text-zinc-500 leading-relaxed">
+                            Some high-tier items (e.g. Twisted bow, 3rd age items) trade in-game above the 2.14B GE cash limit or are heavily manipulated. Add them here to ignore them entirely in predictions.
+                        </p>
+                        
+                        <form onsubmit="addBlacklistItem(event)" class="flex gap-3 pt-2">
+                            <input type="text" id="new-blacklist-item" placeholder="Enter exact item name..." class="flex-1 bg-zinc-950 border border-zinc-800 text-zinc-200 px-4 py-2 rounded-lg text-xs focus:outline-none focus:border-amber-500 transition-all font-sans">
+                            <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-zinc-950 font-bold px-5 py-2 rounded-lg text-xs uppercase transition-all shrink-0">Add Item</button>
+                        </form>
+
+                        <div class="border border-zinc-800/80 rounded-lg max-h-[300px] overflow-y-auto custom-scrollbar mt-3">
+                            <ul id="blacklist-ul" class="divide-y divide-zinc-850 text-xs">
+                                <!-- Populated dynamically -->
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- SUBTAB: PARAMS -->
+                    <div id="subtab-params-panel" class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl space-y-4 hidden">
+                        <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-3 flex items-center gap-2">
+                            <i data-lucide="settings" class="w-4 h-4 text-amber-500"></i> System Configuration Parameters
+                        </h3>
+
+                        <form id="settings-form" onsubmit="saveSystemSettings(event)" class="space-y-4 text-xs">
+                            <h4 class="font-bold text-[11px] text-zinc-400 uppercase tracking-widest border-b border-zinc-850 pb-1.5">Grand Exchange API</h4>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-zinc-550 mb-1 font-semibold">Active Snapshot Interval</label>
+                                    <select id="set-timestep" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all">
+                                        <option value="5m">5 Minute Snapshot (High Resolution)</option>
+                                        <option value="1h">1 Hour Snapshot</option>
+                                        <option value="6h">6 Hour Snapshot</option>
+                                        <option value="24h">24 Hour Snapshot</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-zinc-550 mb-1 font-semibold">Max Spread Percentage limit</label>
+                                    <input type="number" id="set-spread-pct" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-zinc-550 mb-1 font-semibold">Minimum Margin required (gp)</label>
+                                    <input type="number" id="set-min-margin" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                                </div>
+                                <div>
+                                    <label class="block text-zinc-550 mb-1 font-semibold">Minimum Daily Volume required</label>
+                                    <input type="number" id="set-min-vol" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                                </div>
+                            </div>
+
+                            <h4 class="font-bold text-[11px] text-zinc-400 uppercase tracking-widest border-b border-zinc-850 pb-1.5 pt-2">Sentinel Daemon alerts</h4>
+                            <div class="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-zinc-550 mb-1 font-semibold">Hot Profit trigger (gp)</label>
+                                    <input type="number" id="set-hot-profit" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                                </div>
+                                <div>
+                                    <label class="block text-zinc-550 mb-1 font-semibold">Hot Return trigger (%)</label>
+                                    <input type="number" step="0.01" id="set-hot-return" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                                </div>
+                                <div>
+                                    <label class="block text-zinc-550 mb-1 font-semibold">Anti-spam hours limit</label>
+                                    <input type="number" id="set-antispam" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                                </div>
+                            </div>
+
+                            <h4 class="font-bold text-[11px] text-zinc-400 uppercase tracking-widest border-b border-zinc-850 pb-1.5 pt-2">Notifications Setup</h4>
+                            <div class="flex items-center gap-2 py-1">
+                                <input type="checkbox" id="set-notif-enabled" class="rounded border-zinc-800 bg-zinc-950 text-amber-500 focus:ring-0 focus:ring-offset-0">
+                                <label for="set-notif-enabled" class="font-semibold text-zinc-350">Enable Email & Discord sentries dispatch</label>
+                            </div>
+                            <div class="grid grid-cols-3 gap-4">
+                                <div class="col-span-2">
+                                    <label class="block text-zinc-550 mb-1 font-semibold">Discord Webhook URL</label>
+                                    <input type="text" id="set-webhook" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-sans">
+                                </div>
+                                <div>
+                                    <label class="block text-zinc-550 mb-1 font-semibold">Recipient Email address</label>
+                                    <input type="email" id="set-email" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-sans">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-zinc-550 mb-1 font-semibold">SMTP Host Server</label>
+                                    <input type="text" id="set-smtp-server" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-sans">
+                                </div>
+                                <div>
+                                    <label class="block text-zinc-550 mb-1 font-semibold">SMTP Host Port</label>
+                                    <input type="number" id="set-smtp-port" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                                </div>
+                            </div>
+
+                            <div class="pt-4 flex items-center justify-end">
+                                <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-zinc-950 font-bold px-8 py-3 rounded-lg text-xs uppercase tracking-wider transition-all shadow-lg shadow-amber-500/10">Save System Settings</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: BACKTEST -->
+            <section id="tab-backtest-view" class="grid grid-cols-12 gap-6 hidden">
+                <!-- CONFIG SIDE PANEL -->
+                <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl col-span-4 flex flex-col h-fit">
+                    <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-4 flex items-center gap-2">
+                        <i data-lucide="settings" class="w-4 h-4 text-amber-500"></i> Simulation Parameters
+                    </h3>
+
+                    <form id="backtest-form" onsubmit="runBacktestSimulation(event)" class="mt-4 space-y-4 text-xs">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-zinc-500 font-semibold mb-1">Years of History</label>
+                                <input type="number" id="bt-years" value="1" min="1" max="5" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-zinc-500 font-semibold mb-1">Timestep</label>
+                                <select id="bt-timestep" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all">
+                                    <option value="1d_weirdgloop">Daily (weirdgloop)</option>
+                                    <option value="24h">24h Snapshots</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-zinc-500 font-semibold mb-1">Initial Capital (gp)</label>
+                            <input type="number" id="bt-capital" value="100000000" min="1000000" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-zinc-500 font-semibold mb-1">k-std deviation</label>
+                                <input type="number" id="bt-k-std" value="1.0" step="0.1" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-zinc-500 font-semibold mb-1">Position fraction</label>
+                                <input type="number" id="bt-pos-frac" value="0.05" step="0.01" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-zinc-500 font-semibold mb-1">Fee rate</label>
+                                <input type="number" id="bt-fee" value="0.01" step="0.001" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-zinc-500 font-semibold mb-1">Top N liquidity items</label>
+                                <input type="number" id="bt-top-n" value="300" min="10" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-zinc-950 font-bold py-3 rounded-lg uppercase tracking-wider transition-all mt-4 shadow-lg shadow-amber-500/10">
+                            Run Simulation
+                        </button>
+                    </form>
+                </div>
+
+                <!-- RESULTS PANEL -->
+                <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl col-span-8 flex flex-col">
+                    <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-4 flex items-center gap-2">
+                        <i data-lucide="bar-chart" class="w-4 h-4 text-amber-500"></i> Simulation Results
+                    </h3>
+
+                    <div id="backtest-results-panel" class="mt-4 flex-1 flex flex-col gap-6">
+                        <p class="text-zinc-500 text-xs italic">Enter config variables and click Run Simulation.</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- MODAL: LOG TRADE -->
+    <div id="trade-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+        <div class="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-xl p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <h3 class="font-bold text-base text-zinc-100 flex items-center gap-2">
+                    <i data-lucide="edit-3" class="w-5 h-5 text-amber-500"></i> Log Trade Execution
+                </h3>
+                <button onclick="closeTradeModal()" class="text-zinc-500 hover:text-zinc-200 transition-all">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="trade-form" onsubmit="submitTrade(event)" class="space-y-3.5 text-xs">
+                <input type="hidden" id="modal-rec-id">
+                <input type="hidden" id="modal-item-id">
+
+                <div>
+                    <label class="block text-zinc-500 font-semibold mb-1 uppercase tracking-wider">Item Name</label>
+                    <input type="text" id="modal-item-name" disabled class="w-full bg-zinc-950 border border-zinc-850 text-zinc-400 px-3 py-2 rounded-lg font-bold">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-zinc-500 font-semibold mb-1 uppercase tracking-wider">Account</label>
+                        <select id="modal-account-id" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-zinc-500 font-semibold mb-1 uppercase tracking-wider">Side</label>
+                        <select id="modal-trade-side" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all">
+                            <option value="buy">BUY (Long)</option>
+                            <option value="sell">SELL (Cover)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-zinc-500 font-semibold mb-1 uppercase tracking-wider">Quantity</label>
+                        <input type="number" id="modal-trade-qty" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                    </div>
+                    <div>
+                        <label class="block text-zinc-500 font-semibold mb-1 uppercase tracking-wider">Price Each (gp)</label>
+                        <input type="number" id="modal-trade-price" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-zinc-500 font-semibold mb-1 uppercase tracking-wider">Execution Note</label>
+                    <textarea id="modal-trade-note" rows="2" placeholder="Describe execution strategy, margin splits etc." class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all resize-none"></textarea>
+                </div>
+
+                <div class="flex items-center gap-3 pt-3">
+                    <button type="button" onclick="closeTradeModal()" class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold py-2.5 rounded-lg transition-all">Cancel</button>
+                    <button type="submit" class="flex-1 bg-amber-500 hover:bg-amber-600 text-zinc-950 font-bold py-2.5 rounded-lg transition-all">Confirm Log</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: ACCOUNT FORM -->
+    <div id="account-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+        <div class="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-xl p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <h3 class="font-bold text-base text-zinc-100 flex items-center gap-2">
+                    <i data-lucide="user-plus" class="w-5 h-5 text-amber-500"></i> Configure Account
+                </h3>
+                <button onclick="closeAccountModal()" class="text-zinc-500 hover:text-zinc-200 transition-all">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="account-form" onsubmit="submitAccount(event)" class="space-y-3.5 text-xs">
+                <input type="hidden" id="acc-id">
+
+                <div>
+                    <label class="block text-zinc-500 font-semibold mb-1 uppercase tracking-wider">Account Reference Name</label>
+                    <input type="text" id="acc-name" placeholder="e.g. Main Account" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all">
+                </div>
+
+                <div>
+                    <label class="block text-zinc-500 font-semibold mb-1 uppercase tracking-wider">In-Game RSN (RuneScape Name)</label>
+                    <input type="text" id="acc-rsn" placeholder="e.g. Pimpwurt" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all">
+                </div>
+
+                <div>
+                    <label class="block text-zinc-500 font-semibold mb-1 uppercase tracking-wider">Starting GP Capital</label>
+                    <input type="number" id="acc-starting-gp" placeholder="e.g. 100000000" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all font-mono">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-zinc-500 font-semibold mb-1 uppercase tracking-wider">Role Profile</label>
+                        <select id="acc-role" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all">
+                            <option value="core_liquidity">Core Liquidity</option>
+                            <option value="high_volume">High Volume Flips</option>
+                            <option value="merchant">Merchant Holding</option>
+                            <option value="skilling">Skilling Processing</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-zinc-500 font-semibold mb-1 uppercase tracking-wider">Status</label>
+                        <select id="acc-active" class="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 px-3 py-2 rounded-lg focus:outline-none focus:border-amber-500 transition-all">
+                            <option value="true">Active (Enable)</option>
+                            <option value="false">Inactive (Disable)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 pt-3">
+                    <button type="button" onclick="closeAccountModal()" class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold py-2.5 rounded-lg transition-all">Cancel</button>
+                    <button type="submit" class="flex-1 bg-amber-500 hover:bg-amber-600 text-zinc-950 font-bold py-2.5 rounded-lg transition-all">Save Config</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN APP JAVASCRIPT LOGIC -->
+    <script>
+        // Global variables
+        let activeTab = 'overview';
+        let activeSettingsSubtab = 'accounts';
+        let allItems = [];
+        let dashboardData = {};
+        let systemSettings = {};
+        let priceChart = null;
+        let activeAccountsList = [];
+
+        // Formatting utilities
+        function formatGP(val) {
+            if (val === null || val === undefined) return 'N/A';
+            return Number(val).toLocaleString('en-US') + ' gp';
+        }
+        function formatPercent(val) {
+            if (val === null || val === undefined) return 'N/A';
+            return (val * 100).toFixed(2) + '%';
+        }
+
+        // Display nice toast notifications
+        function showToast(title, message, isError = false) {
+            const toast = document.getElementById('toast-notif');
+            const tTitle = document.getElementById('toast-title');
+            const tMessage = document.getElementById('toast-message');
+            
+            tTitle.textContent = title;
+            tMessage.textContent = message;
+            
+            if (isError) {
+                toast.className = "fixed top-6 right-6 bg-zinc-900 border border-rose-500/30 text-zinc-100 px-5 py-3.5 rounded-xl shadow-2xl z-55 flex items-center gap-3 transition-all duration-350 transform translate-x-0 opacity-100";
+            } else {
+                toast.className = "fixed top-6 right-6 bg-zinc-900 border border-emerald-500/30 text-zinc-100 px-5 py-3.5 rounded-xl shadow-2xl z-55 flex items-center gap-3 transition-all duration-350 transform translate-x-0 opacity-100";
+            }
+            
+            setTimeout(() => {
+                toast.className = "fixed top-6 right-6 bg-zinc-900 border border-emerald-500/30 text-zinc-100 px-5 py-3.5 rounded-xl shadow-2xl z-55 flex items-center gap-3 transition-all duration-350 transform translate-x-80 opacity-0";
+            }, 3000);
+        }
+
+        // Initialize App
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            // Start clock
+            setInterval(() => {
+                const now = new Date();
+                document.getElementById('utc-clock').textContent = 'UTC TIME: ' + now.toISOString().substr(11, 8);
+            }, 1000);
+
+            // Initial fetch
+            refreshDashboardData(true);
+            loadItemsAutocomplete();
+            loadSystemSettings();
+            
+            // Poll for fresh recommendations every 30 seconds
+            setInterval(() => refreshDashboardData(false), 30000);
+        });
+
+        // Tab Switcher (Vanilla Client Side tab transitions, zero jank)
+        function switchTab(tabId) {
+            activeTab = tabId;
+            
+            // Update button styles
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-zinc-800', 'text-amber-500');
+                btn.classList.add('text-zinc-400', 'hover:text-zinc-200', 'hover:bg-zinc-900/60');
+            });
+            const activeBtn = document.getElementById('btn-' + tabId);
+            activeBtn.classList.add('bg-zinc-800', 'text-amber-500');
+            activeBtn.classList.remove('text-zinc-400', 'hover:text-zinc-200', 'hover:bg-zinc-900/60');
+
+            // Hide/Show tab views
+            document.getElementById('tab-overview-view').classList.add('hidden');
+            document.getElementById('tab-flips-view').classList.add('hidden');
+            document.getElementById('tab-portfolio-view').classList.add('hidden');
+            document.getElementById('tab-news-view').classList.add('hidden');
+            document.getElementById('tab-charts-view').classList.add('hidden');
+            document.getElementById('tab-settings-view').classList.add('hidden');
+            document.getElementById('tab-backtest-view').classList.add('hidden');
+
+            document.getElementById('tab-' + tabId + '-view').classList.remove('hidden');
+            
+            // Set header title
+            const titles = {
+                overview: 'Overview Dashboard',
+                flips: 'Day-Trading Flips Screener',
+                portfolio: 'Portfolio & Positions',
+                news: 'News Sentiment Analysis',
+                charts: 'Grand Exchange Search & Charts',
+                settings: 'Settings & Multi-Account Configurations',
+                backtest: 'Quantitative Backtest Simulator'
+            };
+            document.getElementById('current-tab-title').textContent = titles[tabId];
+            
+            // Re-render sub-components if necessary
+            if (tabId === 'news') loadNewsData();
+            if (tabId === 'settings') loadSettingsSubtab();
+        }
+
+        // Subtabs for Settings tab
+        function switchSettingsSubtab(subtabId) {
+            activeSettingsSubtab = subtabId;
+            
+            // Update buttons styling
+            document.querySelectorAll('.subtab-btn').forEach(btn => {
+                btn.className = "subtab-btn w-full text-left px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850";
+            });
+            
+            const activeSubbtn = document.getElementById('subbtn-' + subtabId);
+            activeSubbtn.className = "subtab-btn w-full text-left px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-zinc-800 text-amber-500";
+            
+            // Hide / Show panels
+            document.getElementById('subtab-accounts-panel').classList.add('hidden');
+            document.getElementById('subtab-blacklist-panel').classList.add('hidden');
+            document.getElementById('subtab-params-panel').classList.add('hidden');
+            
+            document.getElementById('subtab-' + subtabId + '-panel').classList.remove('hidden');
+            loadSettingsSubtab();
+        }
+
+        function loadSettingsSubtab() {
+            if (activeSettingsSubtab === 'blacklist') {
+                renderBlacklist();
+            } else if (activeSettingsSubtab === 'params') {
+                populateSettingsForm();
+            }
+        }
+
+        // Fetch Dashboard state from backend API
+        function refreshDashboardData(showSpinner = false) {
+            if (showSpinner) document.getElementById('loading-spinner').classList.remove('hidden');
+            
+            fetch('/api/summary')
+                .then(res => res.json())
+                .then(data => {
+                    dashboardData = data;
+                    activeAccountsList = data.accounts;
+                    
+                    // Render Metrics Cards
+                    document.getElementById('stat-positions').textContent = data.metrics.n_positions;
+                    document.getElementById('stat-mv').textContent = formatGP(data.metrics.total_market_value);
+                    
+                    const pnlVal = data.metrics.total_unrealized_pnl;
+                    const pnlEl = document.getElementById('stat-pnl');
+                    const iconBgEl = document.getElementById('stat-pnl-icon-bg');
+                    
+                    pnlEl.textContent = (pnlVal >= 0 ? '+' : '') + Number(pnlVal).toLocaleString('en-US') + ' gp';
+                    if (pnlVal >= 0) {
+                        pnlEl.className = 'text-3xl font-bold mt-2 font-mono text-emerald-500';
+                        iconBgEl.className = 'w-12 h-12 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500';
+                        iconBgEl.innerHTML = '<i data-lucide="trending-up" class="w-6 h-6"></i>';
+                    } else {
+                        pnlEl.className = 'text-3xl font-bold mt-2 font-mono text-rose-500';
+                        iconBgEl.className = 'w-12 h-12 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-500';
+                        iconBgEl.innerHTML = '<i data-lucide="trending-down" class="w-6 h-6"></i>';
+                    }
+
+                    // Render Daemon Heartbeat & Status
+                    const daemonBadge = document.getElementById('daemon-badge');
+                    const overviewDot = document.getElementById('overview-daemon-dot');
+                    const heartbeatEl = document.getElementById('stat-daemon-heartbeat');
+                    
+                    // Retrieve heartbeat from backend
+                    const lastRun = data.daemon_last_run;
+                    const isRunning = data.daemon_running;
+                    
+                    if (isRunning) {
+                        daemonBadge.className = "flex items-center gap-1.5 text-emerald-500 font-bold";
+                        daemonBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> ONLINE';
+                        overviewDot.className = "w-3.5 h-3.5 rounded-full bg-emerald-550 shadow-lg animate-pulse shadow-emerald-500/30";
+                    } else {
+                        daemonBadge.className = "flex items-center gap-1.5 text-zinc-500 font-bold";
+                        daemonBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-zinc-500"></span> STANDBY';
+                        overviewDot.className = "w-3.5 h-3.5 rounded-full bg-zinc-500 shadow-lg";
+                    }
+                    heartbeatEl.textContent = lastRun ? 'Last Update: ' + lastRun : 'Last Update: Never';
+
+                    // Update Timestep Text
+                    document.getElementById('daemon-timestep').textContent = data.daemon_timestep || '5M Snapshot';
+
+                    // Render Accounts Table
+                    const accBody = document.getElementById('accounts-table-body');
+                    accBody.innerHTML = '';
+                    data.accounts.forEach(a => {
+                        const row = document.createElement('tr');
+                        row.className = 'hover:bg-zinc-900/40 transition-colors border-b border-zinc-850';
+                        row.innerHTML = `
+                            <td class="py-2.5 font-semibold text-zinc-200">${a.name}</td>
+                            <td class="py-2.5 text-zinc-400 font-mono">${a.rsn}</td>
+                            <td class="py-2.5 text-right font-mono font-bold text-amber-500">${formatGP(a.current_gp)}</td>
+                        `;
+                        accBody.appendChild(row);
+                    });
+
+                    // Render Dashboard Recommendations (top 8)
+                    const dashRecBody = document.getElementById('dashboard-recs-table-body');
+                    dashRecBody.innerHTML = '';
+                    const topRecs = data.recommendations.filter(r => !r.skipped && !r.taken).slice(0, 8);
+                    
+                    if (topRecs.length === 0) {
+                        dashRecBody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-zinc-500 italic">No recommendations found. Run daemon cycle updates.</td></tr>`;
+                    }
+                    
+                    topRecs.forEach(r => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'hover:bg-zinc-900/40 transition-colors border-b border-zinc-850';
+                        tr.innerHTML = `
+                            <td class="py-2.5 font-semibold text-zinc-300">
+                                <div>${r.item}</div>
+                                <div class="text-[10px] text-zinc-500 tracking-wider font-semibold uppercase">${r.strategy}</div>
+                            </td>
+                            <td class="py-2.5 text-right font-mono text-zinc-400">${r.price_each}</td>
+                            <td class="py-2.5 text-right font-mono text-zinc-400">${r.expected_return_pct}</td>
+                            <td class="py-2.5 text-right font-mono text-emerald-500 font-semibold">${r.expected_profit_gp}</td>
+                            <td class="py-2.5 text-center">
+                                <button onclick="openTradeModal(${r.id}, '${r.item.replace(/'/g, "\\'")}', ${r.qty ? r.qty.replace(/,/g, '') : 0}, ${r.price_each ? r.price_each.replace(/,/g, '').replace(' gp', '') : 0}, '${r.side}')" class="bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-zinc-950 px-2.5 py-1 rounded font-bold text-[10px] tracking-wider uppercase transition-all">EXECUTE</button>
+                            </td>
+                        `;
+                        dashRecBody.appendChild(tr);
+                    });
+
+                    // Render Day-Trading Flips Screener list
+                    const flipsBody = document.getElementById('flips-table-body');
+                    flipsBody.innerHTML = '';
+                    const allRecs = data.recommendations;
+                    if (allRecs.length === 0) {
+                        flipsBody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-zinc-500 italic">No recommendations available. Run analysis.</td></tr>`;
+                    }
+                    allRecs.forEach(r => {
+                        const tr = document.createElement('tr');
+                        tr.className = `hover:bg-zinc-900/40 transition-colors border-b border-zinc-850 ${r.taken ? 'opacity-40' : ''} ${r.skipped ? 'opacity-25' : ''}`;
+                        
+                        let actionButtons = '';
+                        if (!r.taken && !r.skipped) {
+                            actionButtons = `
+                                <div class="flex items-center justify-center gap-1.5">
+                                    <button onclick="openTradeModal(${r.id}, '${r.item.replace(/'/g, "\\'")}', ${r.qty ? r.qty.replace(/,/g, '') : 0}, ${r.price_each ? r.price_each.replace(/,/g, '').replace(' gp', '') : 0}, '${r.side}')" class="bg-amber-500 hover:bg-amber-600 text-zinc-950 px-2.5 py-1 rounded text-[10px] font-bold transition-all uppercase">LOG</button>
+                                    <button onclick="skipRecommendation(${r.id})" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-rose-500 px-2 py-1 rounded text-[10px] font-bold transition-all uppercase">SKIP</button>
+                                </div>
+                            `;
+                        } else {
+                            actionButtons = `<span class="text-zinc-600 text-[10px] uppercase font-bold tracking-wider">${r.taken ? 'Taken' : 'Skipped'}</span>`;
+                        }
+
+                        tr.innerHTML = `
+                            <td class="py-3 px-2 text-zinc-500 font-mono text-[10px]">${r.created_at}</td>
+                            <td class="py-3 px-2">
+                                <div class="font-bold text-zinc-200">${r.item}</div>
+                                <div class="text-[9px] text-zinc-500 tracking-wider font-semibold uppercase">${r.strategy}</div>
+                            </td>
+                            <td class="py-3 px-2 text-right font-mono text-zinc-350">${r.price_each}</td>
+                            <td class="py-3 px-2 text-right font-mono text-zinc-350">${r.qty}</td>
+                            <td class="py-3 px-2 text-right font-mono text-zinc-350">${r.reason.includes('Vol:') ? r.reason.split('|')[1].replace('BB:', '').trim() : 'N/A'}</td>
+                            <td class="py-3 px-2 text-right font-mono text-zinc-400 max-w-[200px] truncate" title="${r.reason}">${r.reason}</td>
+                            <td class="py-3 px-2 text-right font-mono text-emerald-500 font-bold">${r.expected_profit_gp}</td>
+                            <td class="py-3 px-2 text-center">${actionButtons}</td>
+                        `;
+                        flipsBody.appendChild(tr);
+                    });
+
+                    // Render Portfolio Table
+                    const portBody = document.getElementById('portfolio-table-body');
+                    portBody.innerHTML = '';
+                    if (data.portfolio.length === 0) {
+                        portBody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-zinc-500 italic">No open positions found. Log execution transactions.</td></tr>`;
+                    }
+                    data.portfolio.forEach(p => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'hover:bg-zinc-900/40 transition-colors border-b border-zinc-850';
+                        
+                        const pnlVal = p.unrealized_pnl;
+                        const pnlClass = pnlVal >= 0 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold';
+                        const pnlSign = pnlVal >= 0 ? '+' : '';
+
+                        tr.innerHTML = `
+                            <td class="py-3 px-2 text-zinc-400 font-semibold">${p.account}</td>
+                            <td class="py-3 px-2">
+                                <div class="font-bold text-zinc-200">${p.item_name}</div>
+                                <div class="text-[9px] text-zinc-500 font-mono">ID: ${p.item_id}</div>
+                            </td>
+                            <td class="py-3 px-2 text-right font-mono font-medium">${p.qty}</td>
+                            <td class="py-3 px-2 text-right font-mono text-zinc-400">${p.avg_cost}</td>
+                            <td class="py-3 px-2 text-right font-mono text-zinc-400">${p.mark_price}</td>
+                            <td class="py-3 px-2 text-right font-mono text-zinc-200">${p.market_value}</td>
+                            <td class="py-3 px-2 text-right font-mono ${pnlClass}">${pnlSign}${Number(pnlVal).toLocaleString('en-US')} gp</td>
+                            <td class="py-3 px-2 text-center">
+                                <button onclick="openClosePositionModal('${p.account}', ${p.item_id}, '${p.item_name.replace(/'/g, "\\'")}', ${p.qty.replace(/,/g, '')}, ${p.mark_price.replace(/,/g, '').replace(' gp', '')})" class="bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-zinc-950 px-2 py-1 rounded text-[10px] font-bold uppercase transition-all">Close Pos</button>
+                            </td>
+                        `;
+                        portBody.appendChild(tr);
+                    });
+
+                    // Render Recent Sentry Alerts
+                    const notifsBody = document.getElementById('notifications-table-body');
+                    notifsBody.innerHTML = '';
+                    // Filter recommendations that were hot and generated in the last 24h
+                    const alertRecs = data.recommendations.filter(r => {
+                        const gp = r.expected_profit_gp ? parseInt(r.expected_profit_gp.replace(/,/g, '').replace(' gp', '')) : 0;
+                        const ret = r.expected_return_pct ? parseFloat(r.expected_return_pct.replace('%', '')) / 100 : 0;
+                        return gp >= 5000000 || ret >= 0.15; // match thresholds
+                    }).slice(0, 10);
+
+                    if (alertRecs.length === 0) {
+                        notifsBody.innerHTML = `<tr><td colspan="6" class="py-5 text-center text-zinc-550 italic">No alert pings recorded in the last 24 hours.</td></tr>`;
+                    }
+                    alertRecs.forEach(r => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'hover:bg-zinc-900/40 border-b border-zinc-850';
+                        tr.innerHTML = `
+                            <td class="py-2.5 font-mono text-zinc-500 text-[10px]">${r.created_at}</td>
+                            <td class="py-2.5 font-bold text-zinc-200">${r.item}</td>
+                            <td class="py-2.5 text-right font-mono text-zinc-400">${r.price_each}</td>
+                            <td class="py-2.5 text-right font-mono text-zinc-400">${r.qty}</td>
+                            <td class="py-2.5 text-right font-mono text-emerald-400 font-bold">${r.expected_profit_gp}</td>
+                            <td class="py-2.5 text-zinc-400 font-mono max-w-[250px] truncate" title="${r.reason}">${r.reason}</td>
+                        `;
+                        notifsBody.appendChild(tr);
+                    });
+
+                    // Render Accounts Configuration cards (under settings tab)
+                    const cardsContainer = document.getElementById('accounts-cards-container');
+                    if (cardsContainer) {
+                        cardsContainer.innerHTML = '';
+                        data.accounts.forEach(a => {
+                            const div = document.createElement('div');
+                            div.className = 'bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-lg flex flex-col justify-between';
+                            div.innerHTML = `
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <h4 class="font-bold text-sm text-zinc-200">${a.name}</h4>
+                                        <span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase ${a.active ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-zinc-800 text-zinc-500 border border-zinc-700/30'}">${a.active ? 'Active' : 'Inactive'}</span>
+                                    </div>
+                                    <p class="text-xs text-zinc-550 font-mono">RSN: <span class="text-zinc-300">${a.rsn}</span></p>
+                                    <p class="text-xs text-zinc-550 uppercase tracking-widest font-semibold text-[10px]">Role: <span class="text-amber-500">${a.role.replace('_', ' ')}</span></p>
+                                </div>
+                                <div class="mt-5 border-t border-zinc-800/80 pt-4 flex items-center justify-between">
+                                    <div>
+                                        <p class="text-[9px] font-semibold text-zinc-500 uppercase tracking-widest">Bank Value</p>
+                                        <p class="text-sm font-bold font-mono text-zinc-300 mt-0.5">${formatGP(a.current_gp)}</p>
+                                    </div>
+                                    <button onclick='openAccountModal(${JSON.stringify(a)})' class="text-zinc-400 hover:text-amber-500 p-1.5 hover:bg-zinc-850 rounded transition-all">
+                                        <i data-lucide="edit" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                            `;
+                            cardsContainer.appendChild(div);
+                        });
+                    }
+
+                    lucide.createIcons();
+                    if (showSpinner) document.getElementById('loading-spinner').classList.add('hidden');
+                })
+                .catch(err => {
+                    console.error('Error fetching summary:', err);
+                    if (showSpinner) document.getElementById('loading-spinner').classList.add('hidden');
+                });
+        }
+
+        // Trigger manual loop cycle
+        function triggerDaemonCycle() {
+            document.getElementById('loading-spinner').classList.remove('hidden');
+            fetch('/api/daemon/run-cycle', { method: 'POST' })
+                .then(res => res.json())
+                .then(res => {
+                    document.getElementById('loading-spinner').classList.add('hidden');
+                    if (res.success) {
+                        showToast("Sentinel Active", "Manual analysis completed. Telegram / Discord alerts dispatched.");
+                        refreshDashboardData(true);
+                    } else {
+                        showToast("Error", res.error || "Execution failed.", true);
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('loading-spinner').classList.add('hidden');
+                    showToast("Error", "Server failed to respond: " + err, true);
+                });
+        }
+
+        // Fetch news and Reddit posts
+        function loadNewsData() {
+            fetch('/api/news')
+                .then(res => res.json())
+                .then(data => {
+                    const officialCon = document.getElementById('official-news-container');
+                    officialCon.innerHTML = '';
+                    
+                    const redditCon = document.getElementById('reddit-news-container');
+                    redditCon.innerHTML = '';
+
+                    const officialItems = data.filter(n => n.source === 'news');
+                    const redditItems = data.filter(n => n.source === 'reddit' || n.source === 'youtube');
+
+                    if (officialItems.length === 0) {
+                        officialCon.innerHTML = `<p class="text-zinc-550 text-xs italic">No official news updates parsed yet.</p>`;
+                    }
+                    if (redditItems.length === 0) {
+                        redditCon.innerHTML = `<p class="text-zinc-550 text-xs italic">No Reddit or YouTube updates parsed yet.</p>`;
+                    }
+
+                    // Render Official Updates
+                    officialItems.forEach(n => {
+                        const itemClass = n.direction === 'UP' ? 'border-emerald-500/20 bg-emerald-500/5' : (n.direction === 'DOWN' ? 'border-rose-500/20 bg-rose-500/5' : 'border-zinc-800/60 bg-zinc-900/30');
+                        const badgeClass = n.direction === 'UP' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : (n.direction === 'DOWN' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-zinc-800 text-zinc-500');
+                        
+                        const div = document.createElement('div');
+                        div.className = `p-4 rounded-xl border flex flex-col gap-2 ${itemClass}`;
+                        div.innerHTML = `
+                            <div class="flex items-center justify-between">
+                                <span class="text-[10px] text-zinc-500 font-mono">${n.date}</span>
+                                <span class="px-2 py-0.5 rounded text-[9px] font-bold border uppercase ${badgeClass}">${n.direction} ${n.expected_move}</span>
+                            </div>
+                            <h4 class="font-bold text-sm text-zinc-200">${n.title}</h4>
+                            <p class="text-[11px] text-zinc-500 font-semibold uppercase">Affects: <span class="text-amber-500">${n.items}</span></p>
+                            <p class="text-xs text-zinc-400 leading-relaxed mt-1"><b class="text-zinc-300 font-medium">Reasoning:</b> ${n.reasoning}</p>
+                        `;
+                        officialCon.appendChild(div);
+                    });
+
+                    // Render Reddit Updates
+                    redditItems.forEach(n => {
+                        const itemClass = n.direction === 'UP' ? 'border-emerald-500/20 bg-emerald-500/5' : (n.direction === 'DOWN' ? 'border-rose-500/20 bg-rose-500/5' : 'border-zinc-800/60 bg-zinc-900/30');
+                        const badgeClass = n.direction === 'UP' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : (n.direction === 'DOWN' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-zinc-800 text-zinc-500');
+
+                        const div = document.createElement('div');
+                        div.className = `p-4 rounded-xl border flex flex-col gap-2 ${itemClass}`;
+                        div.innerHTML = `
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] text-zinc-500 font-mono">${n.date}</span>
+                                    <span class="${n.source === 'youtube' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'} px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border">${n.source}</span>
+                                </div>
+                                <span class="px-2 py-0.5 rounded text-[9px] font-bold border uppercase ${badgeClass}">${n.direction} ${n.expected_move}</span>
+                            </div>
+                            <h4 class="font-bold text-sm text-zinc-200">${n.title}</h4>
+                            <p class="text-xs text-zinc-500 font-mono">${n.summary}</p>
+                            <p class="text-[11px] text-zinc-500 font-semibold uppercase">Affects: <span class="text-amber-500">${n.items}</span></p>
+                            <p class="text-xs text-zinc-400 leading-relaxed mt-1"><b class="text-zinc-300 font-medium">Reasoning:</b> ${n.reasoning}</p>
+                        `;
+                        redditCon.appendChild(div);
+                    });
+                });
+        }
+
+        // Filter flips locally
+        function filterFlips() {
+            const query = document.getElementById('flips-search').value.toLowerCase();
+            document.querySelectorAll('#flips-table-body tr').forEach(row => {
+                const text = row.querySelector('.font-bold').textContent.toLowerCase();
+                if (text.includes(query)) {
+                    row.classList.remove('hidden');
+                } else {
+                    row.classList.add('hidden');
+                }
+            });
+        }
+
+        // Skip Recommendation
+        function skipRecommendation(recId) {
+            fetch(`/api/recommendations/${recId}/skip`, { method: 'POST' })
+                .then(res => res.json())
+                .then(res => {
+                    refreshDashboardData(false);
+                    showToast("Opportunity skipped", "Recommendation set as skipped.");
+                });
+        }
+
+        // Modal Operations
+        function openTradeModal(recId, itemName, qty, price, side) {
+            document.getElementById('modal-rec-id').value = recId || '';
+            document.getElementById('modal-item-id').value = ''; // Exclude initially
+            document.getElementById('modal-item-name').value = itemName;
+            document.getElementById('modal-trade-qty').value = qty || '';
+            document.getElementById('modal-trade-price').value = price || '';
+            document.getElementById('modal-trade-side').value = side || 'buy';
+            document.getElementById('modal-trade-note').value = '';
+
+            // Populate account selector
+            const selector = document.getElementById('modal-account-id');
+            selector.innerHTML = '';
+            activeAccountsList.forEach(a => {
+                const opt = document.createElement('option');
+                opt.value = a.id;
+                opt.textContent = a.name;
+                selector.appendChild(opt);
+            });
+
+            document.getElementById('trade-modal').classList.remove('hidden');
+        }
+
+        function openClosePositionModal(accountName, itemId, itemName, qty, price) {
+            const a = activeAccountsList.find(x => x.name === accountName);
+            const accId = a ? a.id : '';
+
+            openTradeModal(null, itemName, qty, price, 'sell');
+            document.getElementById('modal-item-id').value = itemId;
+            document.getElementById('modal-account-id').value = accId;
+            document.getElementById('modal-trade-note').value = 'Closed position';
+        }
+
+        function closeTradeModal() {
+            document.getElementById('trade-modal').classList.add('hidden');
+        }
+
+        function submitTrade(e) {
+            e.preventDefault();
+            const payload = {
+                rec_id: document.getElementById('modal-rec-id').value ? parseInt(document.getElementById('modal-rec-id').value) : null,
+                item_id: document.getElementById('modal-item-id').value ? parseInt(document.getElementById('modal-item-id').value) : null,
+                item_name: document.getElementById('modal-item-name').value,
+                account_id: parseInt(document.getElementById('modal-account-id').value),
+                side: document.getElementById('modal-trade-side').value,
+                qty: parseInt(document.getElementById('modal-trade-qty').value),
+                price: parseInt(document.getElementById('modal-trade-price').value),
+                note: document.getElementById('modal-trade-note').value
+            };
+
+            fetch('/api/trades', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(res => {
+                closeTradeModal();
+                showToast("Trade Saved", "Position transaction logged successfully.");
+                refreshDashboardData(true);
+            })
+            .catch(err => alert('Error saving trade: ' + err));
+        }
+
+        // Account management
+        function openAccountModal(acc) {
+            if (acc) {
+                document.getElementById('acc-id').value = acc.id;
+                document.getElementById('acc-name').value = acc.name;
+                document.getElementById('acc-rsn').value = acc.rsn;
+                document.getElementById('acc-starting-gp').value = acc.starting_gp;
+                document.getElementById('acc-role').value = acc.role;
+                document.getElementById('acc-active').value = String(acc.active);
+            } else {
+                document.getElementById('acc-id').value = '';
+                document.getElementById('acc-name').value = '';
+                document.getElementById('acc-rsn').value = '';
+                document.getElementById('acc-starting-gp').value = '';
+                document.getElementById('acc-role').value = 'core_liquidity';
+                document.getElementById('acc-active').value = 'true';
+            }
+            document.getElementById('account-modal').classList.remove('hidden');
+        }
+
+        function closeAccountModal() {
+            document.getElementById('account-modal').classList.add('hidden');
+        }
+
+        function submitAccount(e) {
+            e.preventDefault();
+            const payload = {
+                id: document.getElementById('acc-id').value ? parseInt(document.getElementById('acc-id').value) : null,
+                name: document.getElementById('acc-name').value,
+                rsn: document.getElementById('acc-rsn').value,
+                starting_gp: parseInt(document.getElementById('acc-starting-gp').value),
+                role: document.getElementById('acc-role').value,
+                active: document.getElementById('acc-active').value === 'true'
+            };
+
+            fetch('/api/accounts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(res => {
+                closeAccountModal();
+                showToast("Account Saved", "Account configuration modified successfully.");
+                refreshDashboardData(true);
+            })
+            .catch(err => alert('Error saving account: ' + err));
+        }
+
+        // Search & Autocomplete
+        function loadItemsAutocomplete() {
+            fetch('/api/items')
+                .then(res => res.json())
+                .then(data => {
+                    allItems = data;
+                });
+        }
+
+        function searchItems() {
+            const query = document.getElementById('chart-item-search').value.toLowerCase();
+            const dropdown = document.getElementById('search-results-dropdown');
+            dropdown.innerHTML = '';
+            
+            if (!query) {
+                dropdown.classList.add('hidden');
+                return;
+            }
+
+            const matches = allItems.filter(i => i.name.toLowerCase().includes(query)).slice(0, 10);
+            if (matches.length === 0) {
+                dropdown.classList.add('hidden');
+                return;
+            }
+
+            matches.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'px-4 py-2 hover:bg-zinc-800 cursor-pointer text-xs transition-colors border-b border-zinc-850/50';
+                div.textContent = `${item.name} (ID: ${item.id})`;
+                div.onclick = () => {
+                    document.getElementById('chart-item-search').value = item.name;
+                    dropdown.classList.add('hidden');
+                    loadItemChart(item.id);
+                };
+                dropdown.appendChild(div);
+            });
+            dropdown.classList.remove('hidden');
+        }
+
+        // Render Item Chart.js plots (Smooth line + volume bar)
+        function loadItemChart(itemId) {
+            document.getElementById('loading-spinner').classList.remove('hidden');
+            
+            fetch(`/api/item-detail/${itemId}`)
+                .then(res => res.json())
+                .then(data => {
+                    const detailsCon = document.getElementById('chart-item-details');
+                    
+                    const margin = data.margin;
+                    const marginColor = margin >= 0 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold';
+                    const marginSign = margin >= 0 ? '+' : '';
+
+                    detailsCon.innerHTML = `
+                        <div class="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-3 shadow-inner">
+                            <h4 class="font-bold text-sm text-amber-500">${data.name}</h4>
+                            <p class="text-[11px] text-zinc-550 italic leading-relaxed">"${data.examine || 'No description available.'}"</p>
+                            <div class="grid grid-cols-2 gap-y-2.5 gap-x-4 pt-2 border-t border-zinc-850 text-xs">
+                                <div>
+                                    <span class="block text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Item ID</span>
+                                    <span class="font-mono font-medium">${data.id}</span>
+                                </div>
+                                <div>
+                                    <span class="block text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Members?</span>
+                                    <span class="font-medium ${data.members ? 'text-emerald-400' : 'text-zinc-400'}">${data.members ? 'Yes' : 'No'}</span>
+                                </div>
+                                <div>
+                                    <span class="block text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">4h Buy Limit</span>
+                                    <span class="font-mono font-medium">${Number(data.limit).toLocaleString('en-US') || 'N/A'}</span>
+                                </div>
+                                <div>
+                                    <span class="block text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Effective Margin</span>
+                                    <span class="font-mono ${marginColor}">${marginSign}${Number(margin).toLocaleString('en-US')} gp</span>
+                                </div>
+                                <div>
+                                    <span class="block text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Instabuy (High)</span>
+                                    <span class="font-mono font-medium">${Number(data.latest_high).toLocaleString('en-US')} gp</span>
+                                </div>
+                                <div>
+                                    <span class="block text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Instasell (Low)</span>
+                                    <span class="font-mono font-medium">${Number(data.latest_low).toLocaleString('en-US')} gp</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                    // Destroy old chart
+                    if (priceChart) priceChart.destroy();
+
+                    // Process history points
+                    const labels = data.history.map(pt => pt.ts);
+                    const prices = data.history.map(pt => pt.price);
+                    const volumes = data.history.map(pt => pt.volume);
+
+                    // Render Chart.js
+                    const ctx = document.getElementById('itemPriceChart').getContext('2d');
+                    priceChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'Mid Price (gp)',
+                                    data: prices,
+                                    borderColor: '#dfb43a',
+                                    borderWidth: 2,
+                                    pointRadius: 0,
+                                    pointHoverRadius: 5,
+                                    yAxisID: 'y',
+                                    tension: 0.1
+                                },
+                                {
+                                    label: 'Volume',
+                                    data: volumes,
+                                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                                    type: 'bar',
+                                    yAxisID: 'y1',
+                                    barPercentage: 0.8
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: {
+                                mode: 'index',
+                                intersect: false,
+                            },
+                            scales: {
+                                x: {
+                                    grid: { color: '#1a1a20' },
+                                    ticks: { color: '#888', maxRotation: 45 }
+                                },
+                                y: {
+                                    position: 'left',
+                                    grid: { color: '#1a1a20' },
+                                    ticks: { color: '#888' }
+                                },
+                                y1: {
+                                    position: 'right',
+                                    grid: { drawOnChartArea: false },
+                                    ticks: { color: '#444' }
+                                }
+                            },
+                            plugins: {
+                                legend: { display: false }
+                            }
+                        }
+                    });
+
+                    document.getElementById('loading-spinner').classList.add('hidden');
+                })
+                .catch(err => {
+                    console.error('Error rendering chart:', err);
+                    document.getElementById('loading-spinner').classList.add('hidden');
+                });
+        }
+
+        // Fetch System Settings Configuration
+        function loadSystemSettings() {
+            fetch('/api/settings')
+                .then(res => res.json())
+                .then(data => {
+                    systemSettings = data;
+                });
+        }
+
+        function populateSettingsForm() {
+            if (!systemSettings.ge) return;
+            
+            document.getElementById('set-timestep').value = systemSettings.ge.default_timestep || '5m';
+            document.getElementById('set-spread-pct').value = systemSettings.strategy.max_spread_pct || 25;
+            document.getElementById('set-min-margin').value = systemSettings.strategy.min_margin_gp || 3000;
+            document.getElementById('set-min-vol').value = systemSettings.strategy.min_daily_volume || 500;
+            
+            document.getElementById('set-hot-profit').value = systemSettings.daemon.min_profit_hot_alert_gp || 5000000;
+            document.getElementById('set-hot-return').value = systemSettings.daemon.min_return_hot_alert_pct || 0.15;
+            document.getElementById('set-antispam').value = systemSettings.daemon.anti_spam_hours || 4;
+            
+            document.getElementById('set-notif-enabled').checked = systemSettings.notifications.enabled || false;
+            document.getElementById('set-webhook').value = systemSettings.notifications.discord_webhook_url || '';
+            document.getElementById('set-email').value = systemSettings.notifications.recipient_email || '';
+            document.getElementById('set-smtp-server').value = systemSettings.notifications.smtp_server || '';
+            document.getElementById('set-smtp-port').value = systemSettings.notifications.smtp_port || 587;
+        }
+
+        function saveSystemSettings(e) {
+            e.preventDefault();
+            document.getElementById('loading-spinner').classList.remove('hidden');
+
+            const payload = {
+                default_timestep: document.getElementById('set-timestep').value,
+                max_spread_pct: parseInt(document.getElementById('set-spread-pct').value),
+                min_margin_gp: parseInt(document.getElementById('set-min-margin').value),
+                min_daily_volume: parseInt(document.getElementById('set-min-vol').value),
+                
+                min_profit_hot_alert_gp: parseInt(document.getElementById('set-hot-profit').value),
+                min_return_hot_alert_pct: parseFloat(document.getElementById('set-hot-return').value),
+                anti_spam_hours: parseInt(document.getElementById('set-antispam').value),
+                
+                notifications_enabled: document.getElementById('set-notif-enabled').checked,
+                discord_webhook_url: document.getElementById('set-webhook').value,
+                recipient_email: document.getElementById('set-email').value,
+                smtp_server: document.getElementById('set-smtp-server').value,
+                smtp_port: parseInt(document.getElementById('set-smtp-port').value),
+                
+                // Keep the current blacklist in the save payload
+                blacklist: systemSettings.blacklist || []
+            };
+
+            fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(res => {
+                document.getElementById('loading-spinner').classList.add('hidden');
+                if (res.success) {
+                    showToast("Settings Saved", "System configurations successfully updated and cache flushed.");
+                    loadSystemSettings();
+                } else {
+                    showToast("Error", res.error || "Failed to save settings.", true);
+                }
+            })
+            .catch(err => {
+                document.getElementById('loading-spinner').classList.add('hidden');
+                showToast("Error", "Request failed: " + err, true);
+            });
+        }
+
+        // Blacklist UI management
+        function renderBlacklist() {
+            const listUl = document.getElementById('blacklist-ul');
+            listUl.innerHTML = '';
+            
+            const list = systemSettings.blacklist || [];
+            if (list.length === 0) {
+                listUl.innerHTML = `<li class="p-4 text-center text-zinc-500 italic">No blacklisted items configured.</li>`;
+                return;
+            }
+            
+            list.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'flex items-center justify-between px-4 py-3 hover:bg-zinc-850 transition-colors';
+                li.innerHTML = `
+                    <span class="font-semibold text-zinc-350 capitalize">${item}</span>
+                    <button onclick="deleteBlacklistItem('${item.replace(/'/g, "\\'")}')" class="text-zinc-500 hover:text-rose-500 transition-colors p-1" title="Remove filter">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                `;
+                listUl.appendChild(li);
+            });
+            lucide.createIcons();
+        }
+
+        function addBlacklistItem(e) {
+            e.preventDefault();
+            const input = document.getElementById('new-blacklist-item');
+            const name = input.value.trim();
+            if (!name) return;
+
+            const list = systemSettings.blacklist || [];
+            if (list.map(x => x.toLowerCase()).includes(name.toLowerCase())) {
+                showToast("Duplicate", "Item is already on the blacklist.", true);
+                return;
+            }
+
+            list.push(name);
+            systemSettings.blacklist = list;
+            
+            // Sync with backend API
+            saveBlacklistToBackend(list);
+            input.value = '';
+        }
+
+        function deleteBlacklistItem(name) {
+            let list = systemSettings.blacklist || [];
+            list = list.filter(x => x.toLowerCase() !== name.toLowerCase());
+            systemSettings.blacklist = list;
+            saveBlacklistToBackend(list);
+        }
+
+        function saveBlacklistToBackend(blacklist) {
+            // Save the blacklist back via api payload merge
+            const payload = {
+                default_timestep: systemSettings.ge.default_timestep,
+                max_spread_pct: systemSettings.strategy.max_spread_pct,
+                min_margin_gp: systemSettings.strategy.min_margin_gp,
+                min_daily_volume: systemSettings.strategy.min_daily_volume,
+                min_profit_hot_alert_gp: systemSettings.daemon.min_profit_hot_alert_gp,
+                min_return_hot_alert_pct: systemSettings.daemon.min_return_hot_alert_pct,
+                anti_spam_hours: systemSettings.daemon.anti_spam_hours,
+                notifications_enabled: systemSettings.notifications.enabled,
+                discord_webhook_url: systemSettings.notifications.discord_webhook_url,
+                recipient_email: systemSettings.notifications.recipient_email,
+                smtp_server: systemSettings.notifications.smtp_server,
+                smtp_port: systemSettings.notifications.smtp_port,
+                blacklist: blacklist
+            };
+
+            fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(res => {
+                if (res.success) {
+                    showToast("Blacklist Updated", "Street-traded blacklist synced to config file.");
+                    renderBlacklist();
+                }
+            });
+        }
+
+        // Run Backtest Simulation via Flask POST API
+        let backtestChart = null;
+        function runBacktestSimulation(e) {
+            e.preventDefault();
+            document.getElementById('loading-spinner').classList.remove('hidden');
+
+            const payload = {
+                years: parseInt(document.getElementById('bt-years').value),
+                timestep: document.getElementById('bt-timestep').value,
+                initial_capital: parseInt(document.getElementById('bt-capital').value),
+                k_std: parseFloat(document.getElementById('bt-k-std').value),
+                position_fraction: parseFloat(document.getElementById('bt-pos-frac').value),
+                fee_rate: parseFloat(document.getElementById('bt-fee').value),
+                top_n: parseInt(document.getElementById('bt-top-n').value)
+            };
+
+            fetch('/api/backtest', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(data => {
+                const resultsCon = document.getElementById('backtest-results-panel');
+                
+                if (data.error) {
+                    resultsCon.innerHTML = `<p class="text-rose-500 font-bold">Error: ${data.error}</p>`;
+                    document.getElementById('loading-spinner').classList.add('hidden');
+                    return;
+                }
+
+                const metrics = data.metrics;
+                const retPct = (metrics.total_return * 100).toFixed(2) + '%';
+                const ddPct = (metrics.max_drawdown * 100).toFixed(2) + '%';
+
+                resultsCon.innerHTML = `
+                    <div class="grid grid-cols-4 gap-4 text-center">
+                        <div class="bg-zinc-950 p-4 border border-zinc-850 rounded-xl shadow-inner">
+                            <span class="block text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Final Equity</span>
+                            <span class="font-mono text-base font-bold text-zinc-200">${Number(metrics.final_equity).toLocaleString('en-US')} gp</span>
+                        </div>
+                        <div class="bg-zinc-950 p-4 border border-zinc-850 rounded-xl shadow-inner">
+                            <span class="block text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Total Return</span>
+                            <span class="font-mono text-base font-bold text-emerald-400">${retPct}</span>
+                        </div>
+                        <div class="bg-zinc-950 p-4 border border-zinc-850 rounded-xl shadow-inner">
+                            <span class="block text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Sharpe Ratio</span>
+                            <span class="font-mono text-base font-bold text-zinc-200">${metrics.sharpe.toFixed(2)}</span>
+                        </div>
+                        <div class="bg-zinc-950 p-4 border border-zinc-850 rounded-xl shadow-inner">
+                            <span class="block text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Max Drawdown</span>
+                            <span class="font-mono text-base font-bold text-rose-500">${ddPct}</span>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 min-h-[300px] mt-4 relative">
+                        <canvas id="backtestChart"></canvas>
+                    </div>
+                `;
+
+                // Render backtest curve
+                const labels = data.equity_curve.map(pt => pt.ts);
+                const equity = data.equity_curve.map(pt => pt.equity);
+
+                const ctx = document.getElementById('backtestChart').getContext('2d');
+                if (backtestChart) backtestChart.destroy();
+                backtestChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Account Equity (gp)',
+                                data: equity,
+                                borderColor: '#00e5ff',
+                                borderWidth: 2,
+                                pointRadius: 0,
+                                fill: false,
+                                tension: 0.1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: { grid: { color: '#1a1a20' }, ticks: { color: '#888' } },
+                            y: { grid: { color: '#1a1a20' }, ticks: { color: '#888' } }
+                        },
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+
+                document.getElementById('loading-spinner').classList.add('hidden');
+            })
+            .catch(err => {
+                alert('Backtest execution failed: ' + err);
+                document.getElementById('loading-spinner').classList.add('hidden');
+            });
+        }
+    </script>
+</body>
+</html>

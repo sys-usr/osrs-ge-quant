@@ -1,0 +1,37 @@
+strategies:
+- name: high_margin_flip
+  type: flip
+  params:
+    min_margin_gp: 3000
+    min_daily_volume: 500
+    max_spread_pct: 25
+    max_capital_fraction: 0.2
+    use_multi_account_limits: true
+- name: midcap_liquidity_flip
+  type: flip
+  params:
+    min_margin_gp: 800
+    min_daily_volume: 20000
+    max_spread_pct: 12
+    max_capital_fraction: 0.1
+    use_multi_account_limits: true
+- name: herblore_processing
+  type: processing
+  params:
+    min_profit_per_batch: 2000
+    min_profit_per_hour_gp: 800000
+    skills_required:
+      Herblore: 70
+- name: construction_planks
+  type: processing
+  params:
+    min_profit_per_batch: 500
+    min_profit_per_hour_gp: 500000
+    skills_required:
+      Construction: 70
+- name: news_momentum
+  type: news
+  params:
+    min_confidence: 0.6
+    min_directional_strength: 0.02
+    horizon_hours: 24

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>net.runelite.plugins</groupId>
+    <artifactId>gequant-plugin</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <name>GE Quant Partner</name>
+    <description>Partner plugin for OSRS GE Quant Terminal to sync bank value, stats, and active GE offers.</description>
+
+    <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <runelite.version>1.10.12</runelite.version> <!-- Update based on active RuneLite client version -->
+    </properties>
+
+    <repositories>
+        <repository>
+            <id>runelite</id>
+            <name>RuneLite Repository</name>
+            <url>https://repo.runelite.net/repository/maven-public/</url>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <!-- RuneLite API -->
+        <dependency>
+            <groupId>net.runelite</groupId>
+            <artifactId>runelite-api</artifactId>
+            <version>${runelite.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <!-- RuneLite Client -->
+        <dependency>
+            <groupId>net.runelite</groupId>
+            <artifactId>client</artifactId>
+            <version>${runelite.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <!-- Lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.26</version>
+            <scope>provided</scope>
+        </dependency>
+        <!-- OkHttp for API requests -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>4.10.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <!-- Gson for JSON parsing -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>

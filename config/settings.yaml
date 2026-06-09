@@ -1,0 +1,49 @@
+data_dir: ./data
+db_url: sqlite:///data/db/osrs_ge.db
+user_agent: osrs-ge-quant/0.1 (london.thomson.merriman@gmail.com)
+ge:
+  tax_rate: 0.01
+  tax_free_threshold: 50
+  default_timestep: 5m
+  universe_refresh_hours: 6
+news:
+  max_articles: 40
+  use_chatgpt: true
+  gemini_model: gemini-2.5-flash
+  openai_model: gpt-4o-mini
+analysis:
+  default_min_margin_gp: 500
+  default_min_daily_volume: 1000
+  max_recommendations_per_cycle: 200
+  backtest_years: 1
+  max_item_price_gp: 1500000000
+  blacklisted_items:
+  - Twisted bow
+  - 3rd age pickaxe
+  - 3rd age druidic robe top
+  - 3rd age druidic robe bottoms
+  - 3rd age axe
+  - 3rd age longsword
+  - 3rd age bow
+  - 3rd age wand
+  - 3rd age cloak
+  - Scythe of vitur
+dashboard:
+  host: 127.0.0.1
+  port: 8050
+  debug: true
+hiscores:
+  mode: main
+logging:
+  level: INFO
+notifications:
+  enabled: true
+  smtp_server: smtp.gmail.com
+  smtp_port: 587
+  recipient_email: london.thomson.merriman@gmail.com
+  discord_webhook_url: https://discord.com/api/webhooks/1514009397951467570/qEUG_FytLRyisBicTyeZmMcN7nbdM7cBFq_dTP4yLaID92Sb_G_gACMATN0d1VKHWflE
+daemon:
+  interval_minutes: 5
+  min_profit_hot_alert_gp: 5000000
+  min_return_hot_alert_pct: 0.15
+  anti_spam_hours: 4

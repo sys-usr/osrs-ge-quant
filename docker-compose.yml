@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # The heavy-duty engine for storing millions of GE price ticks
+  postgres:
+    image: postgres:15
+    container_name: osrs_quant_db
+    environment:
+      POSTGRES_USER: osrs_admin
+      POSTGRES_PASSWORD: osrs_password
+      POSTGRES_DB: osrs_ge
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # The research terminal for plotting distributions and prototyping
+  jupyter:
+    image: jupyter/scipy-notebook:latest
+    container_name: osrs_quant_jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./src:/home/jovyan/work/src
+      - ./notebooks:/home/jovyan/work/notebooks
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+      # This puts your local code into the Jupyter python path
+      PYTHONPATH: "/home/jovyan/work/src"
+    command: start-notebook.sh --NotebookApp.token='' --NotebookApp.password=''
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata:
