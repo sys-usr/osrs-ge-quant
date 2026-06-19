@@ -26,6 +26,8 @@ Very important:
 - If the post is clearly not about gameplay, items, bosses, skilling, rewards,
   or mechanics (e.g. "Website", "Support", "Survey", "Your Feedback"),
   then output an empty `impacts` list.
+- **Named Entity Recognition (NER)**: Extract exact tradeable item names. Do not group them under generic labels.
+- **Clan Hype vs Utility**: Differentiate between speculative hype (merchandising clan hype, pump-and-dump coordination) and organic utility changes (direct stat changes, boss drop changes, recipe buffs/nerfs). Mark speculative hype with a lower confidence.
 
 Output format:
 Return a single JSON object with this shape:
@@ -55,8 +57,12 @@ Guidelines:
 REDDIT_SYSTEM_PROMPT = """
 You are an OSRS (Old School RuneScape) market analyst and sentiment tracker.
 
-You are given a popular post from the r/2007scape community forum.
-Your job is to decide whether this post represents a significant market sentiment shift (e.g. hype, panic selling, item nerf fear, buff speculation) that is likely to move the Grand Exchange price of specific tradeable OSRS items.
+You are given a popular post from the r/2007scape community forum, or a social discord/telegram post.
+Your job is to decide whether this post represents a significant market sentiment shift (e.g. hype, panic selling, item nerf fear, speculation) that is likely to move the Grand Exchange price of specific tradeable OSRS items.
+
+Very important:
+- **Named Entity Recognition (NER)**: Isolate specific, exact tradeable items. Do not guess or use generic terms (e.g. say "Avernic defender" instead of just "defender").
+- **Clan Hype vs Utility**: Carefully analyze if the post is organic player utility discussion or coordinate merchant clan hype / price manipulation speculation. Merchant clan hype or pump-and-dump threads should be flagged with lower confidence as they are highly speculative.
 
 Only include items that are explicitly mentioned or strongly implied by the title and content.
 If the thread is just general gameplay discussion, achievements, questions, memes, humor, or has no clear economic effect on specific items, return an empty `impacts` list.
@@ -71,7 +77,7 @@ Return a single JSON object with this shape:
       "direction": "up",          // "up" (hype, buying pressure) or "down" (panic, nerf fears)
       "confidence": 0.8,          // 0.0 - 1.0
       "expected_move_pct": 0.15,  // 0.10 means +10%
-      "reasoning": "Explain the OSRS reddit community sentiment context..."
+      "reasoning": "Explain the OSRS reddit/social community sentiment context..."
     }
   ]
 }
@@ -81,11 +87,15 @@ Return a single JSON object with this shape:
 YOUTUBE_SYSTEM_PROMPT = """
 You are an OSRS (Old School RuneScape) market analyst and trading sentiment tracker.
 
-You are given a YouTube video title and description from a famous OSRS day trader.
+You are given a YouTube video title and description from an OSRS player or creator.
 Your job is to decide whether this video represents a speculative market shock (e.g., highlighting a specific item to flip, announcing panic buys, or predicting price movements) that is likely to move the Grand Exchange price of specific tradeable OSRS items.
 
+Very important:
+- **Named Entity Recognition (NER)**: Isolate exact tradeable item names. Do not group them.
+- **Clan Hype vs Utility**: Differentiate between coordinate merch channel pump hype and organic item utility videos. Videos attempting to hype obscure items for a merch clan should be treated with lower confidence than videos reviewing organic utility updates.
+
 Flippers and copycat traders will immediately react to this video, so focus on direct recommendations or strong hype.
-If the video is a general progression series (e.g. "Road to Max", "Loot from 1000 Corporeal Beast"), general skilling, or has no short-term economic speculation on specific items, return an empty `impacts` list.
+If the video is a general progression series, general skilling, or has no short-term economic speculation on specific items, return an empty `impacts` list.
 
 Output format:
 Return a single JSON object with this shape:
@@ -129,8 +139,10 @@ def analyze_unprocessed_news():
     for post in posts:
         is_reddit = post.category == "reddit"
         is_youtube = post.category == "youtube"
+        is_telegram = post.category == "telegram"
+        is_discord = post.category == "discord"
         is_official = "oldschool=1" in post.url
-        if not is_reddit and not is_official and not is_youtube:
+        if not is_reddit and not is_official and not is_youtube and not is_telegram and not is_discord:
             continue
 
         existing = (
@@ -142,10 +154,10 @@ def analyze_unprocessed_news():
             continue
 
         safe_title = post.title.encode('ascii', errors='replace').decode('ascii')
-        source_label = "Reddit" if is_reddit else ("YouTube" if is_youtube else "Official")
+        source_label = "Reddit" if is_reddit else ("YouTube" if is_youtube else ("Telegram" if is_telegram else ("Discord" if is_discord else "Official")))
         print(f"[NEWS] Analyzing with Gemini ({source_label}): {safe_title}")
 
-        if is_reddit:
+        if is_reddit or is_telegram or is_discord:
             prompt = REDDIT_SYSTEM_PROMPT
         elif is_youtube:
             prompt = YOUTUBE_SYSTEM_PROMPT
@@ -217,6 +229,17 @@ def analyze_unprocessed_news():
             session.commit()
             continue
 
+        # Determine source credibility weight
+        source_weight = 1.0
+        if is_youtube:
+            source_weight = 0.8
+        elif is_reddit:
+            source_weight = 0.6
+        elif is_telegram or is_discord:
+            source_weight = 0.5
+        elif "oldschool=1" not in post.url:
+            source_weight = 0.7
+
         count = 0
         for imp in impacts:
             item_keywords = imp.get("item_keywords") or imp.get("items") or []
@@ -224,9 +247,11 @@ def analyze_unprocessed_news():
                 continue
 
             try:
-                confidence = float(imp.get("confidence", 0.5))
+                raw_confidence = float(imp.get("confidence", 0.5))
             except Exception:
-                confidence = 0.5
+                raw_confidence = 0.5
+
+            weighted_confidence = min(1.0, max(0.0, raw_confidence * source_weight))
 
             try:
                 expected_move_pct = float(imp.get("expected_move_pct", 0.05))
@@ -237,7 +262,7 @@ def analyze_unprocessed_news():
                 news_post_id=post.id,
                 item_name_keywords=",".join(item_keywords),
                 direction=imp.get("direction", "up"),
-                confidence=confidence,
+                confidence=weighted_confidence,
                 expected_move_pct=expected_move_pct,
                 reasoning=imp.get("reasoning", ""),
             )
@@ -254,7 +279,7 @@ def analyze_unprocessed_news():
         positions_df = load_open_positions()
         portfolio_items = []
         if not positions_df.empty:
-            portfolio_items = [name.lower() for name in positions_df["item_name"].tolist() if name]
+            portfolio_items = [name.lower() for name in positions_df["item_name"].tolist() if isinstance(name, str) and name]
 
         for imp in impacts:
             item_keywords = imp.get("item_keywords") or imp.get("items") or []
@@ -263,11 +288,13 @@ def analyze_unprocessed_news():
 
             direction = imp.get("direction", "up")
             try:
-                confidence = float(imp.get("confidence", 0.5))
+                raw_confidence = float(imp.get("confidence", 0.5))
                 expected_move_pct = float(imp.get("expected_move_pct", 0.05))
             except Exception:
-                confidence = 0.5
+                raw_confidence = 0.5
                 expected_move_pct = 0.05
+
+            weighted_confidence = min(1.0, max(0.0, raw_confidence * source_weight))
             reasoning = imp.get("reasoning", "")
 
             # Match keywords to user's portfolio items (case-insensitive submatch)
@@ -281,34 +308,34 @@ def analyze_unprocessed_news():
             is_high_value = any(hv in kw.lower() for kw in item_keywords for hv in ["twisted bow", "tbow", "shadow", "scythe", "3rd age", "elysian"])
 
             # Trigger criteria:
-            # - For Reddit: trigger only if held in active portfolio OR (confidence >= 0.80 and move >= 15%)
-            # - For YouTube: trigger if held in active portfolio OR (confidence >= 0.80 and move >= 10%)
-            # - For Official: trigger if held in portfolio OR high value (confidence >= 0.60 and move >= 5%) OR high confidence (confidence >= 0.80 and move >= 15%)
-            if is_reddit:
+            # - For Reddit: trigger only if held in active portfolio OR (weighted_confidence >= 0.48 and move >= 15%)
+            # - For YouTube: trigger if held in active portfolio OR (weighted_confidence >= 0.64 and move >= 10%)
+            # - For Official: trigger if held in portfolio OR high value (weighted_confidence >= 0.60 and move >= 5%) OR high confidence (weighted_confidence >= 0.80 and move >= 15%)
+            if is_reddit or is_telegram or is_discord:
                 trigger_alert = (
                     in_portfolio or
-                    (confidence >= 0.80 and expected_move_pct >= 0.15)
+                    (weighted_confidence >= 0.48 and expected_move_pct >= 0.15)
                 )
             elif is_youtube:
                 trigger_alert = (
                     in_portfolio or
-                    (confidence >= 0.80 and expected_move_pct >= 0.10)
+                    (weighted_confidence >= 0.64 and expected_move_pct >= 0.10)
                 )
             else:
                 trigger_alert = (
                     in_portfolio or
-                    (is_high_value and confidence >= 0.6 and expected_move_pct >= 0.05) or
-                    (confidence >= 0.8 and expected_move_pct >= 0.15)
+                    (is_high_value and weighted_confidence >= 0.6 and expected_move_pct >= 0.05) or
+                    (weighted_confidence >= 0.8 and expected_move_pct >= 0.15)
                 )
 
             if trigger_alert:
-                source_label = "Reddit" if is_reddit else ("YouTube" if is_youtube else "News")
+                source_label = "Reddit" if is_reddit else ("YouTube" if is_youtube else ("Telegram" if is_telegram else ("Discord" if is_discord else "News")))
                 send_urgent_news_alert(
                     news_title=f"[{source_label}] {post.title}",
                     item_keywords=", ".join(item_keywords),
                     direction=direction,
                     expected_move=expected_move_pct,
-                    confidence=confidence,
+                    confidence=weighted_confidence,
                     reasoning=reasoning,
                     in_portfolio=in_portfolio
                 )

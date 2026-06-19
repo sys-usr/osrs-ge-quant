@@ -75,11 +75,20 @@ def run_full_cycle(send_digest: bool = True):
         expected_return = float(r["expected_return_pct"])
         item_id = int(r["item_id"])
         
+        # Check order book velocity & dump sentry walls
+        from .strategy import check_order_book_walls_and_velocity
+        sentry = check_order_book_walls_and_velocity(item_id)
+        if not sentry["is_safe"]:
+            print(f"[Engine] Skipping recommendation for item {item_id} due to sentry alert: {sentry['reason']}")
+            continue
+        
         rsi_val = float(r.get("rsi", 50.0))
         bb_l = float(r.get("bb_lower", 0.0))
         bb_u = float(r.get("bb_upper", 0.0))
         v_surge = float(r.get("vol_surge", 1.0))
-        reason_str = f"RSI: {rsi_val:.1f} | BB: [{bb_l:,.0f} - {bb_u:,.0f}] | Vol: {v_surge:.1f}x"
+        spread_vol = float(r.get("spread_vol", 0.0))
+        vwap = float(r.get("vwap", 0.0))
+        reason_str = f"RSI: {rsi_val:.1f} | BB: [{bb_l:,.0f} - {bb_u:,.0f}] | Vol: {v_surge:.1f}x | SpreadVol: {spread_vol:.1f} | VWAP: {vwap:.1f}"
         
         rec = Recommendation(
             strategy_name=r["strategy_name"],

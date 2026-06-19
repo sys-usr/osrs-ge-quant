@@ -53,6 +53,8 @@ def compute_technical_indicators(df: pd.DataFrame, timestep: str) -> pd.DataFram
         df["bb_lower"] = df["avgLowPrice"] if "avgLowPrice" in df.columns else 0.0
         df["bb_upper"] = df["avgHighPrice"] if "avgHighPrice" in df.columns else 0.0
         df["vol_surge"] = 1.0
+        df["spread_vol"] = 0.0
+        df["vwap"] = df["avgLowPrice"] if "avgLowPrice" in df.columns else 0.0
         return df
 
     # Fetch last 30 price points for the active timestep
@@ -79,6 +81,8 @@ def compute_technical_indicators(df: pd.DataFrame, timestep: str) -> pd.DataFram
     bb_lower_vals = {}
     bb_upper_vals = {}
     vol_surge_vals = {}
+    spread_vol_vals = {}
+    vwap_vals = {}
 
     for item_id, p_list in history.items():
         # Sort chronologically
@@ -88,15 +92,18 @@ def compute_technical_indicators(df: pd.DataFrame, timestep: str) -> pd.DataFram
         
         prices = []
         volumes = []
+        spreads = []
         for p in p_list:
             high = p.avg_high or 0.0
             low = p.avg_low or 0.0
             mid = (high + low) / 2.0 if high and low else (high or low or 0.0)
             prices.append(mid)
-            volumes.append(p.high_vol or p.low_vol or 0.0)
+            volumes.append((p.high_vol or 0.0) + (p.low_vol or 0.0))
+            spreads.append(high - low)
             
         prices = np.array(prices)
         volumes = np.array(volumes)
+        spreads = np.array(spreads)
         
         # 1. Bollinger Bands (20 periods or max available)
         n_bb = min(20, len(prices))
@@ -132,12 +139,29 @@ def compute_technical_indicators(df: pd.DataFrame, timestep: str) -> pd.DataFram
         else:
             vol_surge_vals[item_id] = 1.0
 
+        # 4. Spread Volatility (empirical std deviation over last 10 periods)
+        n_spread = min(10, len(spreads))
+        recent_spreads = spreads[-n_spread:]
+        spread_vol_vals[item_id] = np.std(recent_spreads) if len(recent_spreads) > 0 else 0.0
+
+        # 5. VWAP (Volume-Weighted Average Price over last 10 periods)
+        n_vwap = min(10, len(prices))
+        recent_prices_v = prices[-n_vwap:]
+        recent_vols = volumes[-n_vwap:]
+        sum_vol = np.sum(recent_vols)
+        if sum_vol > 0:
+            vwap_vals[item_id] = np.sum(recent_prices_v * recent_vols) / sum_vol
+        else:
+            vwap_vals[item_id] = recent_prices_v[-1] if len(recent_prices_v) > 0 else 0.0
+
     # Map back to the dataframe
     id_col = "item_id" if "item_id" in df.columns else "id"
     df["rsi"] = df[id_col].map(rsi_vals).fillna(50.0)
     df["bb_lower"] = df[id_col].map(bb_lower_vals).fillna(df["avgLowPrice"] if "avgLowPrice" in df.columns else 0.0)
     df["bb_upper"] = df[id_col].map(bb_upper_vals).fillna(df["avgHighPrice"] if "avgHighPrice" in df.columns else 0.0)
     df["vol_surge"] = df[id_col].map(vol_surge_vals).fillna(1.0)
+    df["spread_vol"] = df[id_col].map(spread_vol_vals).fillna(0.0)
+    df["vwap"] = df[id_col].map(vwap_vals).fillna(df["avgLowPrice"] if "avgLowPrice" in df.columns else 0.0)
     
     return df
 
@@ -245,11 +269,29 @@ def generate_flip_recommendations(df: pd.DataFrame, param_overrides: dict = None
     timestep = settings.get("ge", {}).get("default_timestep", "5m")
     work = compute_technical_indicators(work, timestep)
     
+    # Run Isolation Forest Anomaly Detection to flag wash-trading/clan manipulation
+    if len(work) >= 5:
+        try:
+            from sklearn.ensemble import IsolationForest
+            feat_cols = ["avgLowPrice", "spread_pct", "vol_surge", "margin_eff", "rsi"]
+            X = work[feat_cols].copy()
+            for col in feat_cols:
+                X[col] = pd.to_numeric(X[col], errors='coerce').fillna(0.0)
+                X[col] = X[col].replace([np.inf, -np.inf], 0.0)
+            clf = IsolationForest(contamination=0.05, random_state=42)
+            preds = clf.fit_predict(X)
+            work["is_anomaly"] = (preds == -1).astype(int)
+        except Exception as e:
+            print(f"[Strategy] IsolationForest anomaly detection error: {e}")
+            work["is_anomaly"] = 0
+    else:
+        work["is_anomaly"] = 0
+
     cols = [
         "item_id", "name", "strategy_name", "avgHighPrice", 
         "avgLowPrice", "margin_eff", "suggested_qty", 
         "expected_profit_gp", "expected_return_pct", "limit", "buy_price",
-        "rsi", "bb_lower", "bb_upper", "vol_surge"
+        "rsi", "bb_lower", "bb_upper", "vol_surge", "spread_vol", "vwap", "is_anomaly"
     ]
     existing_cols = [c for c in cols if c in work.columns]
     
@@ -265,3 +307,81 @@ def generate_processing_recommendations(df_24h: pd.DataFrame) -> pd.DataFrame:
     if not proc_df.empty:
         proc_df["strategy_name"] = proc_df["required_skill"].str.lower() + "_processing"
     return proc_df
+
+
+def check_order_book_walls_and_velocity(item_id: int) -> dict:
+    """
+    Checks the real-time order book velocity and detects potential sell/buy walls.
+    Acts as a sentry to reject recommendations or abort buys if a dump is detected.
+    """
+    from .ge_api import OSRSWikiClient
+    client = OSRSWikiClient()
+    try:
+        df = client.fetch_timeseries_for_item(item_id, timestep="5m")
+        if df.empty or len(df) < 5:
+            return {
+                "is_safe": True,
+                "buy_depth": 1.0,
+                "sell_depth": 1.0,
+                "velocity": 0.0,
+                "reason": "Insufficient timeseries data"
+            }
+        
+        # Sort chronologically
+        df = df.sort_values("ts")
+        
+        # Get recent prices
+        high_prices = df["avgHighPrice"].ffill().values
+        low_prices = df["avgLowPrice"].ffill().values
+        mid_prices = (high_prices + low_prices) / 2.0
+        
+        # Get recent volumes
+        high_vols = df["highPriceVolume"].fillna(0).values
+        low_vols = df["lowPriceVolume"].fillna(0).values
+        
+        # Current status
+        current_mid = mid_prices[-1]
+        
+        # 1. Calculate price velocity (recent 3 periods = 15 minutes)
+        prev_mid = mid_prices[-4] if len(mid_prices) >= 4 else mid_prices[0]
+        velocity = (current_mid - prev_mid) / (prev_mid + 1e-9)
+        
+        # 2. Calculate average volume for baseline
+        n_periods = min(12, len(low_vols)) # 1 hour baseline
+        avg_low_vol = np.mean(low_vols[-n_periods:])
+        avg_high_vol = np.mean(high_vols[-n_periods:])
+        
+        current_low_vol = low_vols[-1]
+        current_high_vol = high_vols[-1]
+        
+        buy_depth = float(current_high_vol)
+        sell_depth = float(current_low_vol)
+        
+        # 3. Detect massive sell wall / dump indicator
+        is_safe = True
+        reason = "Normal market conditions"
+        
+        if avg_low_vol > 0 and current_low_vol > 4.0 * avg_low_vol and velocity < -0.01:
+            is_safe = False
+            reason = f"Massive sell wall detected: volume ({current_low_vol:.0f}) is {current_low_vol/avg_low_vol:.1f}x normal, velocity ({velocity*100:.2f}%) is negative."
+            
+        if velocity < -0.05:
+            is_safe = False
+            reason = f"Price flash crash detected: velocity ({velocity*100:.2f}%) is negative."
+            
+        return {
+            "is_safe": is_safe,
+            "buy_depth": max(1.0, buy_depth),
+            "sell_depth": max(1.0, sell_depth),
+            "velocity": velocity,
+            "reason": reason
+        }
+    except Exception as e:
+        print(f"[Strategy] Error checking order book walls/velocity for item {item_id}: {e}")
+        return {
+            "is_safe": True,
+            "buy_depth": 1.0,
+            "sell_depth": 1.0,
+            "velocity": 0.0,
+            "reason": f"API error: {e}"
+        }

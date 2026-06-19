@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     UniqueConstraint,
+    Index,
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
@@ -70,6 +71,7 @@ class PricePoint(Base):
     item = relationship("Item", back_populates="prices")
     __table_args__ = (
         UniqueConstraint("item_id", "ts", "timestep", name="uq_item_ts_step"),
+        Index("idx_prices_item_ts_step", "item_id", "ts", "timestep"),
     )
 
 
@@ -131,6 +133,10 @@ class NewsPost(Base):
     summary: Mapped[Optional[str]] = mapped_column(String)
     raw_text: Mapped[Optional[str]] = mapped_column(String)
 
+    __table_args__ = (
+        Index("idx_news_date_cat", "date", "category"),
+    )
+
 
 class NewsImpact(Base):
     __tablename__ = "news_impacts"
@@ -144,3 +150,18 @@ class NewsImpact(Base):
     reasoning: Mapped[str] = mapped_column(String)
 
     news_post = relationship("NewsPost")
+
+
+class DQNExperience(Base):
+    __tablename__ = "dqn_experiences"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    state: Mapped[str] = mapped_column(String)  # Serialized state vector (JSON string)
+    action: Mapped[int] = mapped_column(Integer)
+    reward: Mapped[float] = mapped_column(Float)
+    next_state: Mapped[str] = mapped_column(String)  # Serialized next state vector (JSON string)
+    done: Mapped[bool] = mapped_column(Boolean)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+    ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+    account = relationship("Account")

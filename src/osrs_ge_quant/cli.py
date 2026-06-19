@@ -15,6 +15,9 @@ from osrs_ge_quant.engine import run_full_cycle
 from osrs_ge_quant.news import fetch_news_archive, fetch_news_details
 from osrs_ge_quant.news_analyzer import analyze_unprocessed_news
 from osrs_ge_quant.webapp.app import run_dashboard
+from osrs_ge_quant.ml_lstm import train_lstm
+from osrs_ge_quant.speculator import run_speculation_cycle
+from osrs_ge_quant.discord_bot import start_discord_bot
 
 from osrs_ge_quant.backtest import backtest_flip_strategy, sweep_backtests
 from osrs_ge_quant.screeners import run_zscore_screener
@@ -69,67 +72,120 @@ def cmd_analyze(args):
 
 
 def cmd_dashboard(args):
+    print("[CLI] Starting Discord Command Bot Daemon...")
+    start_discord_bot()
     print("[CLI] Starting dashboard at http://127.0.0.1:8050 ...")
     run_dashboard()
 
 
-def cmd_daemon(args):
+def cmd_train_lstm(args):
+    print("[CLI] Training PyTorch LSTM Sequence model...")
+    res = train_lstm()
+    if "error" in res:
+        print("[CLI] Error training LSTM:", res["error"])
+    else:
+        print(f"[CLI] LSTM Training complete. RMSE: {res['rmse']:.6f}. MAE: {res['mae']:.6f}")
+
+
+def cmd_train_dqn(args):
+    print("[CLI] Training PyTorch DQN Pricing model...")
+    from osrs_ge_quant.ml_dqn import DQNPricingAgent, sync_replay_buffer_from_db
+    from osrs_ge_quant.config import data_dir
+    import os
+    # pyrefly: ignore [missing-import]
+    import numpy as np
+    
+    agent = DQNPricingAgent()
+    
+    model_path = os.path.join(data_dir(), "dqn_model.pth")
+    if os.path.exists(model_path):
+        print(f"[CLI] Loading existing model weights from {model_path}...")
+        agent.load_model(model_path)
+        
+    sync_replay_buffer_from_db(agent, limit=10000)
+    
+    buffer_len = len(agent.replay_buffer)
+    if buffer_len < agent.batch_size:
+        print(f"[CLI] Replay buffer size ({buffer_len}) is less than batch size ({agent.batch_size}).")
+        print("[CLI] Bootstrapping replay buffer with simulated OSRS order book transition logs...")
+        
+        for _ in range(500):
+            current_price = float(np.random.randint(1000, 10000000))
+            spread = float(current_price * np.random.uniform(0.01, 0.08))
+            buy_depth = float(np.random.randint(10, 2000))
+            sell_depth = float(np.random.randint(10, 2000))
+            
+            norm_spread = spread / (current_price + 1e-9)
+            log_buy = np.log1p(buy_depth)
+            log_sell = np.log1p(sell_depth)
+            imbalance = (buy_depth - sell_depth) / (buy_depth + sell_depth + 1e-9)
+            state = np.array([norm_spread, log_buy, log_sell, imbalance, 1.0], dtype=np.float32)
+            
+            action = np.random.randint(0, 10)
+            
+            if action in [4, 5, 6, 9]:
+                reward = float(spread * np.random.uniform(0.1, 0.9))
+            else:
+                reward = float(-spread * np.random.uniform(0.05, 0.3))
+                
+            next_price = current_price + np.random.randint(-50, 50)
+            next_spread = float(next_price * np.random.uniform(0.01, 0.08))
+            next_buy_depth = float(np.random.randint(10, 2000))
+            next_sell_depth = float(np.random.randint(10, 2000))
+            next_state = np.array([
+                next_spread / (next_price + 1e-9),
+                np.log1p(next_buy_depth),
+                np.log1p(next_sell_depth),
+                (next_buy_depth - next_sell_depth) / (next_buy_depth + next_sell_depth + 1e-9),
+                1.0
+            ], dtype=np.float32)
+            
+            done = bool(np.random.choice([True, False]))
+            agent.replay_buffer.push(state, action, reward, next_state, done)
+            
+        buffer_len = len(agent.replay_buffer)
+        
+    print(f"[CLI] Starting DQN training loop with {buffer_len} experiences in buffer...")
+    losses = []
+    
+    epochs = args.epochs
+    for step in range(1, epochs + 1):
+        loss = agent.train_step()
+        if loss is not None:
+            losses.append(loss)
+            
+        if step % 10 == 0:
+            agent.update_target_network()
+            
+        if step % 20 == 0 and losses:
+            avg_loss = sum(losses[-20:]) / len(losses[-20:])
+            print(f"  Step {step}/{epochs} - Average Loss: {avg_loss:.6f} - Epsilon: {agent.epsilon:.4f}")
+            
+        agent.update_epsilon()
+        
+    agent.save_model(model_path)
+    print(f"[CLI] DQN Training complete. Model weights saved to {model_path}")
+
+
+def cmd_speculate(args):
+    print("[CLI] Running Speculation and news analysis cycle...")
+    run_speculation_cycle()
+
+
+def cmd_run_bot(args):
+    print("[CLI] Launching Discord Command Bot Daemon standalone...")
+    start_discord_bot()
     import time
-    from osrs_ge_quant.config import load_settings
-    print("[CLI] Starting continuous Day-Trading Daemon...")
-    settings = load_settings()
-    daemon_settings = settings.get("daemon", {})
-    interval_mins = daemon_settings.get("interval_minutes", 5)
-    print(f"[Daemon] Interval configured: {interval_mins} minutes.")
-    
-    last_digest_time = None
-    
     try:
         while True:
-            start_time = time.time()
-            now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-            print(f"\n[Daemon] [{now_str}] Starting cycle update...")
-            try:
-                # 1. Fetch and analyze OSRS news & Reddit posts
-                print("[Daemon] Fetching OSRS news updates...")
-                posts = fetch_news_archive()
-                print(f"[Daemon] Fetched {len(posts)} new archive entries.")
-                for p in posts:
-                    fetch_news_details(p)
-                
-                print("[Daemon] Fetching YouTube updates...")
-                from osrs_ge_quant.news import fetch_youtube_feed
-                yt_posts = fetch_youtube_feed()
-                print(f"[Daemon] Fetched {len(yt_posts)} new YouTube video uploads.")
-                
-                print("[Daemon] Scraping r/2007scape Reddit discussions...")
-                from osrs_ge_quant.reddit import scrape_reddit
-                scrape_reddit()
-                
-                print("[Daemon] Running sentiment analysis on news & Reddit posts...")
-                analyze_unprocessed_news()
-
-                
-                # 2. Run price cycle & hot flip checks
-                # Send digest on first run or every 12 hours
-                should_send_digest = (last_digest_time is None or (time.time() - last_digest_time) >= 12 * 3600)
-                print(f"[Daemon] Running full analysis cycle (send_digest={should_send_digest})...")
-                run_full_cycle(send_digest=should_send_digest)
-                if should_send_digest:
-                    last_digest_time = time.time()
-                    
-                print(f"[Daemon] [{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}] Cycle completed successfully.")
-            except Exception as e:
-                import traceback
-                print(f"[Daemon] [Error] Exception in cycle execution: {e}")
-                traceback.print_exc()
-            
-            elapsed = time.time() - start_time
-            sleep_time = max(0.0, (interval_mins * 60.0) - elapsed)
-            print(f"[Daemon] Sleeping for {sleep_time / 60.0:.2f} minutes until next update.")
-            time.sleep(sleep_time)
+            time.sleep(1)
     except KeyboardInterrupt:
-        print("\n[Daemon] KeyboardInterrupt received. Shutting down daemon gracefully.")
+        print("[CLI] Bot shutdown complete.")
+
+
+def cmd_daemon(args):
+    from osrs_ge_quant.sentinel import run_sentinel_daemon
+    run_sentinel_daemon()
 
 
 def cmd_log_trade(args):
@@ -301,8 +357,9 @@ def cmd_portfolio(args):
 
     print("\nTop contributors:")
     for row in summary["top_contributors"]:
+        item_name = str(row.get('item_name') or 'Unknown')
         print(
-            f"  {row['item_id']:>6} {row['item_name'][:28]:<28} "
+            f"  {row['item_id']:>6} {item_name[:28]:<28} "
             f"P&L: {row['unrealized_pnl']:>12.0f} gp"
         )
 
@@ -351,6 +408,38 @@ def cmd_event_study(args):
     print("rel_day\tcum_ret(%)")
     for d, c in zip(avg["rel_days"], avg["avg_cum_return"]):
         print(f"{d:+3d}\t{c*100:6.2f}")
+
+
+def cmd_train_model(args):
+    from osrs_ge_quant.ml_predictor import train_flip_model
+    res = train_flip_model()
+    if "error" in res:
+        print("[CLI] Model training failed:", res["error"])
+    else:
+        print(f"[CLI] Model training complete. Sample size: {res['sample_count']}. Out-of-sample MAE: {res['mae']:.0f} gp. Accuracy: {res['accuracy']*100:.1f}%.")
+
+
+def cmd_evaluate_sentiment(args):
+    from osrs_ge_quant.sentiment_evaluator import evaluate_sentiment_performance
+    res = evaluate_sentiment_performance()
+    if not res:
+        print("[CLI] No sentiment data to evaluate. Run news scraping and analysis first.")
+        return
+    
+    print("\n[CLI] Sentiment Predictive Accuracy Report:")
+    print("-" * 75)
+    print(f"{'Source':<10} | {'Count':<6} | {'3d Acc (%)':<10} | {'7d Acc (%)':<10} | {'Mean UP 7d (%)':<14} | {'Mean DOWN 7d (%)':<16}")
+    print("-" * 75)
+    for cat, stats in res.items():
+        print(
+            f"{cat:<10} | "
+            f"{stats['count']:<6} | "
+            f"{stats['accuracy_3d']:<10.2f} | "
+            f"{stats['accuracy_7d']:<10.2f} | "
+            f"{stats['mean_return_up_7d']:<14.2f} | "
+            f"{stats['mean_return_down_7d']:<16.2f}"
+        )
+    print("-" * 75)
 
 
 # --------------------------
@@ -459,6 +548,16 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--window-post", type=int, default=21)
     ev.add_argument("--timestep", default="1d_weirdgloop")
 
+    sub.add_parser("train-model", help="Train Random Forest models on historical flip details")
+    sub.add_parser("evaluate-sentiment", help="Evaluate historical news/sentiment predictive accuracy")
+    sub.add_parser("train-lstm", help="Train PyTorch LSTM forecasting model on hourly price logs")
+    
+    dqn_parser = sub.add_parser("train-dqn", help="Train PyTorch DQN pricing model on federated DB experiences")
+    dqn_parser.add_argument("--epochs", type=int, default=100, help="Number of updates to train")
+    
+    sub.add_parser("speculate", help="Run Jagex news and Reddit speculation cycles to generate news buy signals")
+    sub.add_parser("run-bot", help="Run Discord Bot daemon standalone")
+
     return p
 
 
@@ -488,6 +587,12 @@ def main():
         "analyze-news": cmd_analyze_news,
         "backfill-timeseries": cmd_backfill_timeseries,
         "event-study": cmd_event_study,
+        "train-model": cmd_train_model,
+        "evaluate-sentiment": cmd_evaluate_sentiment,
+        "train-lstm": cmd_train_lstm,
+        "train-dqn": cmd_train_dqn,
+        "speculate": cmd_speculate,
+        "run-bot": cmd_run_bot,
     }
 
     fn = commands.get(args.cmd)

@@ -24,6 +24,29 @@ daemon_lock = threading.Lock()
 
 # --- Flask Server Routes ---
 
+automation_coordinates = {}
+
+@app.route("/api/runelite/automation-state", methods=["GET", "POST"])
+def runelite_automation_state():
+    global automation_coordinates
+    if request.method == "POST":
+        data = request.json or {}
+        coords = data.get("coordinates", {})
+        if coords:
+            automation_coordinates.update(coords)
+        return jsonify({"success": True, "coordinates": automation_coordinates})
+    else:
+        return jsonify({"success": True, "coordinates": automation_coordinates})
+
+@app.route("/api/ledger")
+def get_ledger():
+    from ..ledger import get_consolidated_ledger
+    try:
+        ledger = get_consolidated_ledger()
+        return jsonify(ledger)
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 500
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -79,6 +102,13 @@ def get_dashboard_summary():
             "skipped": r.skipped,
             "reason": r.reason or "Margin Flip Setup"
         })
+
+    # Run ML prediction on the live recommendations if models exist
+    from ..ml_predictor import predict_live_flips
+    try:
+        rec_list = predict_live_flips(rec_list)
+    except Exception as ex:
+        print(f"[ML app.py] Error predicting live flips: {ex}")
 
     # 3. Portfolio Open Positions
     positions = load_open_positions()
@@ -289,13 +319,39 @@ def post_account():
 @app.route("/api/news")
 def get_news_impacts():
     session = get_session()
-    impacts = (
+    
+    # Query official news impacts
+    news_impacts = (
         session.query(NewsImpact, NewsPost)
         .join(NewsPost, NewsImpact.news_post_id == NewsPost.id)
+        .filter(NewsPost.category == None)
         .order_by(NewsPost.date.desc())
-        .limit(40)
+        .limit(30)
         .all()
     )
+    
+    # Query reddit impacts
+    reddit_impacts = (
+        session.query(NewsImpact, NewsPost)
+        .join(NewsPost, NewsImpact.news_post_id == NewsPost.id)
+        .filter(NewsPost.category == "reddit")
+        .order_by(NewsPost.date.desc())
+        .limit(30)
+        .all()
+    )
+    
+    # Query youtube impacts
+    youtube_impacts = (
+        session.query(NewsImpact, NewsPost)
+        .join(NewsPost, NewsImpact.news_post_id == NewsPost.id)
+        .filter(NewsPost.category == "youtube")
+        .order_by(NewsPost.date.desc())
+        .limit(30)
+        .all()
+    )
+    
+    impacts = news_impacts + reddit_impacts + youtube_impacts
+    impacts.sort(key=lambda x: x[1].date, reverse=True)
     session.close()
 
     rows = []
@@ -316,6 +372,17 @@ def get_news_impacts():
             "summary": np.summary or ""
         })
     return jsonify(rows)
+
+
+@app.route("/api/sentiment/evaluation")
+def get_sentiment_evaluation():
+    from ..sentiment_evaluator import evaluate_sentiment_performance
+    try:
+        res = evaluate_sentiment_performance()
+        return jsonify(res)
+    except Exception as ex:
+        print(f"[Sentiment Eval Route] Error evaluating performance: {ex}")
+        return jsonify({"error": str(ex)}), 500
 
 
 @app.route("/api/runelite/sync", methods=["POST"])
@@ -566,6 +633,153 @@ def run_daemon_cycle():
         daemon_lock.release()
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/whatif")
+def get_whatif_tracker():
+    session = get_session()
+    settings = load_settings()
+    default_timestep = settings.get("ge", {}).get("default_timestep", "24h")
+
+    # Fetch all pure_flip recommendations (limit to latest 300 and sort chronologically)
+    recs = (
+        session.query(Recommendation)
+        .filter(Recommendation.signal_type == "pure_flip")
+        .order_by(Recommendation.created_at.desc())
+        .limit(300)
+        .all()
+    )
+    recs.reverse()
+    
+    if not recs:
+        session.close()
+        return jsonify({
+            "summary": {
+                "total_trades": 0,
+                "win_rate": 0.0,
+                "cumulative_actual_profit": 0.0,
+                "cumulative_expected_profit": 0.0,
+                "avg_actual_profit": 0.0,
+            },
+            "trades": []
+        })
+
+    # Get all item names for mapping
+    item_ids = list(set(r.item_id for r in recs if r.item_id is not None))
+    items_map = {}
+    if item_ids:
+        items_query = session.query(Item.id, Item.name).filter(Item.id.in_(item_ids)).all()
+        items_map = {it.id: it.name for it in items_query}
+
+    # Fetch all PricePoints for these items in chronological order to find the next price point
+    price_points = (
+        session.query(PricePoint.item_id, PricePoint.ts, PricePoint.avg_high, PricePoint.avg_low)
+        .filter(PricePoint.item_id.in_(item_ids), PricePoint.timestep == default_timestep)
+        .order_by(PricePoint.ts.asc())
+        .all()
+    )
+    if not price_points:
+        price_points = (
+            session.query(PricePoint.item_id, PricePoint.ts, PricePoint.avg_high, PricePoint.avg_low)
+            .filter(PricePoint.item_id.in_(item_ids))
+            .order_by(PricePoint.ts.asc())
+            .all()
+        )
+    session.close()
+
+    # Group PricePoints by item_id
+    from collections import defaultdict
+    prices_by_item = defaultdict(list)
+    for pp in price_points:
+        prices_by_item[pp.item_id].append({
+            "ts": pp.ts,
+            "avg_high": pp.avg_high,
+            "avg_low": pp.avg_low
+        })
+
+    simulated_trades = []
+    cumulative_actual_profit = 0.0
+    cumulative_expected_profit = 0.0
+    wins = 0
+    total_trades = 0
+
+    for r in recs:
+        if r.item_id is None or r.price_each is None or r.qty is None:
+            continue
+
+        item_name = items_map.get(r.item_id, "Unknown Item")
+        buy_price = r.price_each
+        qty = r.qty
+        created_at = r.created_at
+        expected_profit = r.expected_profit_gp or 0.0
+        cumulative_expected_profit += expected_profit
+
+        # Find the first PricePoint after created_at where avg_high is not None
+        pps = prices_by_item[r.item_id]
+        sell_pp = None
+        for pp in pps:
+            if pp["ts"] > created_at and pp["avg_high"] is not None:
+                sell_pp = pp
+                break
+
+        if sell_pp:
+            sell_price = sell_pp["avg_high"]
+            sell_ts_str = sell_pp["ts"].strftime("%Y-%m-%d %H:%M:%S")
+            status = "Realized"
+            tax = calculate_osrs_tax(sell_price)
+            actual_profit = qty * (sell_price - tax - buy_price)
+        else:
+            # If no subsequent price point is found, the trade is still pending or open
+            # We can use the latest available price point as the mark to market sell price
+            if pps:
+                latest_pp = pps[-1]
+                sell_price = latest_pp["avg_high"] or latest_pp["avg_low"] or buy_price
+                sell_ts_str = "N/A (Pending)"
+                status = "Open"
+                tax = calculate_osrs_tax(sell_price)
+                actual_profit = qty * (sell_price - tax - buy_price)
+            else:
+                sell_price = buy_price
+                sell_ts_str = "N/A"
+                status = "Open"
+                tax = 0.0
+                actual_profit = 0.0
+
+        actual_return_pct = (actual_profit / (qty * buy_price)) if buy_price > 0 else 0.0
+
+        if actual_profit > 0:
+            wins += 1
+        total_trades += 1
+        cumulative_actual_profit += actual_profit
+
+        simulated_trades.append({
+            "id": r.id,
+            "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "item_id": r.item_id,
+            "item_name": item_name,
+            "qty": qty,
+            "buy_price": buy_price,
+            "sell_price": sell_price,
+            "tax_each": tax,
+            "expected_profit": expected_profit,
+            "actual_profit": actual_profit,
+            "actual_return_pct": actual_return_pct,
+            "status": status,
+            "sold_at": sell_ts_str
+        })
+
+    win_rate = (wins / total_trades * 100) if total_trades > 0 else 0.0
+    avg_actual_profit = (cumulative_actual_profit / total_trades) if total_trades > 0 else 0.0
+
+    return jsonify({
+        "summary": {
+            "total_trades": total_trades,
+            "win_rate": round(win_rate, 2),
+            "cumulative_actual_profit": cumulative_actual_profit,
+            "cumulative_expected_profit": cumulative_expected_profit,
+            "avg_actual_profit": avg_actual_profit
+        },
+        "trades": simulated_trades
+    })
+
 @app.route("/api/backtest", methods=["POST"])
 def post_backtest():
     data = request.json or {}
@@ -648,7 +862,9 @@ def run_background_daemon_loop():
             print("[Background Daemon] Fetching YouTube updates...")
             try:
                 from ..news import fetch_youtube_feed
-                fetch_youtube_feed()
+                yt_posts = fetch_youtube_feed()
+                for p in yt_posts:
+                    fetch_news_details(p)
             except Exception as e:
                 print(f"[Background Daemon] [YouTube Error] {e}")
 
@@ -657,6 +873,13 @@ def run_background_daemon_loop():
                 scrape_reddit()
             except Exception as e:
                 print(f"[Background Daemon] [Reddit Error] {e}")
+
+            print("[Background Daemon] Scraping Telegram & Discord channels...")
+            try:
+                from ..social_sentiment import run_social_sentiment_scraping
+                run_social_sentiment_scraping()
+            except Exception as e:
+                print(f"[Background Daemon] [Social Error] {e}")
 
             print("[Background Daemon] Running sentiment analysis on news & Reddit posts...")
             try:
@@ -692,12 +915,8 @@ def run_dashboard():
     port = settings["dashboard"].get("port", 8050)
     debug = settings["dashboard"].get("debug", False)
 
-    # Start background daemon sentinel thread
-    import os
-    if not debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-        print("[Flask] Starting background Day-Trading Daemon thread...")
-        daemon_thread = threading.Thread(target=run_background_daemon_loop, daemon=True)
-        daemon_thread.start()
+    # Dashboard is now fully decoupled from the Sentinel daemon process.
+    # The Sentinel daemon should be run separately (e.g. via cli.py daemon).
 
     print(f"[Flask] Running OSRS Bloomberg Terminal at http://{host}:{port}")
     app.run(host=host, port=port, debug=debug, threaded=True)

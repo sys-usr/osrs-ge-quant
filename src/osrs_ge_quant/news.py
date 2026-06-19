@@ -46,12 +46,16 @@ def fetch_news_archive() -> List[NewsPost]:
     soup = BeautifulSoup(resp.text, "html.parser")
 
     new_posts: List[NewsPost] = []
+    seen_urls = set()
 
     for a in soup.find_all("a"):
         href = a.get("href") or ""
         title = a.get_text(strip=True)
 
         if not href or not title:
+            continue
+
+        if "read more" in title.lower():
             continue
 
         # Only OSRS news posts: must be m=news with oldschool=1
@@ -64,6 +68,8 @@ def fetch_news_archive() -> List[NewsPost]:
             continue
 
         url = _absolute_url(href)
+        if url in seen_urls:
+            continue
 
         existing = (
             session.query(NewsPost)
@@ -71,6 +77,8 @@ def fetch_news_archive() -> List[NewsPost]:
             .first()
         )
         if existing:
+            # Still track it as seen so we don't query DB again for this URL in subsequent iterations
+            seen_urls.add(url)
             continue
 
         post = NewsPost(
@@ -81,6 +89,7 @@ def fetch_news_archive() -> List[NewsPost]:
         )
         session.add(post)
         new_posts.append(post)
+        seen_urls.add(url)
 
     session.commit()
     print(f"[NEWS] Added {len(new_posts)} new archive entries.")
@@ -106,6 +115,57 @@ def fetch_news_details(post: Union[NewsPost, int]) -> NewsPost | None:
     if post_obj.raw_text:
         return post_obj
 
+    if post_obj.category == "youtube":
+        import re
+        video_id = None
+        url = post_obj.url or ""
+        pattern = r'(?:v=|\/embed\/|\/v\/|youtu\.be\/|\/watch\?v=|\/shorts\/)([a-zA-Z0-9_-]{11})'
+        match = re.search(pattern, url)
+        if match:
+            video_id = match.group(1)
+
+        transcript_text = None
+        if video_id:
+            try:
+                from youtube_transcript_api import YouTubeTranscriptApi
+                print(f"[YouTube] Fetching transcript for video_id={video_id}...")
+                transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+                transcript_text = " ".join([t['text'] for t in transcript_list])
+                print(f"[YouTube] Successfully fetched transcript ({len(transcript_text)} chars)")
+            except Exception as e:
+                print(f"[YouTube] Transcript API failed or unavailable for {video_id}: {e}")
+
+        if not transcript_text:
+            print(f"[YouTube] Running regex-based fallback keyword extraction for post {post_obj.id}...")
+            # Query all tradeable item names
+            from .models import Item
+            items = session.query(Item.name).filter(Item.tradeable == True).all()
+            item_names = [item[0] for item in items]
+            
+            search_text = f"{post_obj.title} {post_obj.summary or ''}"
+            search_text_lower = search_text.lower()
+            found_items = []
+            
+            for name in item_names:
+                if len(name) < 4:
+                    escaped = re.escape(name)
+                    if re.search(r'\b' + escaped + r'\b', search_text):
+                        found_items.append(name)
+                else:
+                    escaped = re.escape(name.lower())
+                    if re.search(r'\b' + escaped + r'\b', search_text_lower):
+                        found_items.append(name)
+            
+            fallback_text = f"Title: {post_obj.title}\nDescription & Details:\n{post_obj.summary or ''}\n\nFallback Extracted Items: {', '.join(found_items)}"
+            post_obj.raw_text = fallback_text[:20000]
+        else:
+            post_obj.raw_text = transcript_text[:20000]
+
+        session.add(post_obj)
+        session.commit()
+        print(f"[NEWS] Fetched youtube details for '{post_obj.title}'")
+        return post_obj
+
     try:
         resp = requests.get(post_obj.url, headers=HEADERS, timeout=15)
         resp.raise_for_status()
@@ -114,6 +174,25 @@ def fetch_news_details(post: Union[NewsPost, int]) -> NewsPost | None:
         return post_obj
 
     soup = BeautifulSoup(resp.text, "html.parser")
+
+    # Extract date if available
+    date_el = (
+        soup.select_one(".news-article__date")
+        or soup.select_one(".article-meta__date")
+        or soup.select_one("time")
+        or soup.select_one(".news-article__meta")
+    )
+    if date_el:
+        date_str = date_el.get_text(strip=True)
+        # Handle cases where it contains label text like "Posted on:"
+        import re
+        date_str_clean = re.sub(r'(?i)posted\s+on:?', '', date_str).strip()
+        try:
+            import pandas as pd
+            parsed_date = pd.to_datetime(date_str_clean).to_pydatetime()
+            post_obj.date = parsed_date
+        except Exception as ex:
+            print(f"[NEWS] Date parsing failed for string '{date_str_clean}': {ex}")
 
     # Try a few likely containers, fall back to whole body
     body = (
@@ -188,10 +267,21 @@ def fetch_youtube_feed() -> List[NewsPost]:
             # Get description / media details if available
             media_group = entry.find("media:group", ns)
             description = ""
+            tags_str = ""
             if media_group is not None:
                 media_desc = media_group.find("media:description", ns)
                 if media_desc is not None and media_desc.text:
                     description = media_desc.text.strip()
+                media_key = media_group.find("media:keywords", ns)
+                if media_key is not None and media_key.text:
+                    tags_str = media_key.text.strip()
+
+            summary_parts = []
+            if description:
+                summary_parts.append(description)
+            if tags_str:
+                summary_parts.append(f"Tags: {tags_str}")
+            summary_text = "\n".join(summary_parts) if summary_parts else "YouTube Upload from FlippingOldSchool"
 
             # Skip if duplicate
             existing = session.query(NewsPost).filter_by(url=video_url).first()
@@ -201,8 +291,8 @@ def fetch_youtube_feed() -> List[NewsPost]:
                     url=video_url,
                     date=published_dt,
                     category="youtube",
-                    summary="YouTube Upload from FlippingOldSchool",
-                    raw_text=description[:5000] # store first 5k chars of description
+                    summary=summary_text[:5000],
+                    raw_text=None
                 )
                 session.add(np)
                 new_posts.append(np)

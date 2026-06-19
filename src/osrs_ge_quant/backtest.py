@@ -49,10 +49,12 @@ def backtest_flip_strategy(
     position_fraction: float = 0.05,
     fee_rate: float = 0.01,
     top_n: int = 300,
+    start_date: datetime = None,
+    end_date: datetime = None,
 ) -> Dict[str, Any]:
     
-    end = datetime.utcnow()
-    start = end - timedelta(days=365*years)
+    end = end_date if end_date else datetime.utcnow()
+    start = start_date if start_date else (end - timedelta(days=365*years))
     step_delta = _parse_timestep(timestep)
 
     current = start

@@ -81,6 +81,9 @@
             <button onclick="switchTab('backtest')" id="btn-backtest" class="tab-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60">
                 <i data-lucide="history" class="w-4 h-4"></i> Backtest Engine
             </button>
+            <button onclick="switchTab('whatif')" id="btn-whatif" class="tab-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60">
+                <i data-lucide="calculator" class="w-4 h-4"></i> What-If Tracker
+            </button>
         </nav>
 
         <div class="p-4 border-t border-zinc-800 flex flex-col gap-2">
@@ -217,6 +220,7 @@
                                         <th class="py-2.5 text-right">Price</th>
                                         <th class="py-2.5 text-right">Effective Margin</th>
                                         <th class="py-2.5 text-right font-semibold text-emerald-500">Expected Profit</th>
+                                        <th class="py-2.5 text-center">ML Rating</th>
                                         <th class="py-2.5 text-center">Actions</th>
                                     </tr>
                                 </thead>
@@ -274,6 +278,9 @@
                                     <th class="py-3 px-2 text-right">Unit Margin</th>
                                     <th class="py-3 px-2 text-right font-mono text-zinc-400">Technical Indicators</th>
                                     <th class="py-3 px-2 text-right text-emerald-500">Expected Profit</th>
+                                    <th class="py-3 px-2 text-center text-amber-500 font-semibold">ML Rating</th>
+                                    <th class="py-3 px-2 text-right text-amber-500 font-semibold font-mono">ML Confidence</th>
+                                    <th class="py-3 px-2 text-right text-amber-500 font-semibold font-mono">ML Target Profit</th>
                                     <th class="py-3 px-2 text-center">Actions</th>
                                 </tr>
                             </thead>
@@ -287,6 +294,37 @@
 
             <!-- TAB: PORTFOLIO -->
             <section id="tab-portfolio-view" class="space-y-6 hidden">
+                <!-- CONSOLIDATED LEDGER SUMMARY -->
+                <div class="grid grid-cols-3 gap-6">
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-zinc-550 uppercase tracking-widest">Consolidated Cash Stack</p>
+                            <h3 id="port-total-cash" class="text-2xl font-bold mt-2 font-mono text-zinc-100">0 gp</h3>
+                        </div>
+                        <div class="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400">
+                            <i data-lucide="coins" class="w-5 h-5"></i>
+                        </div>
+                    </div>
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-zinc-550 uppercase tracking-widest">Active Assets Valuation</p>
+                            <h3 id="port-total-assets" class="text-2xl font-bold mt-2 font-mono text-zinc-100">0 gp</h3>
+                        </div>
+                        <div class="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400">
+                            <i data-lucide="briefcase" class="w-5 h-5"></i>
+                        </div>
+                    </div>
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-zinc-550 uppercase tracking-widest">Consolidated Net Worth</p>
+                            <h3 id="port-total-networth" class="text-2xl font-bold mt-2 font-mono text-amber-500">0 gp</h3>
+                        </div>
+                        <div class="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500">
+                            <i data-lucide="shield-check" class="w-5 h-5"></i>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex flex-col">
                     <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-4 flex items-center gap-2">
                         <i data-lucide="briefcase" class="w-4 h-4 text-amber-500"></i> Active Holdings & Mark-To-Market Valuation
@@ -315,24 +353,36 @@
             </section>
 
             <!-- TAB: NEWS -->
-            <section id="tab-news-view" class="grid grid-cols-2 gap-6 hidden">
-                <!-- GAME UPDATE ARTICLES -->
+            <section id="tab-news-view" class="flex flex-col gap-6 hidden">
+                <!-- SENTIMENT EVALUATION SCORECARD -->
                 <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex flex-col">
-                    <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-3 flex items-center gap-2">
-                        <i data-lucide="newspaper" class="w-4 h-4 text-amber-500"></i> Jagex Official Update Sentries
+                    <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-3 flex items-center gap-2 mb-4">
+                        <i data-lucide="bar-chart-2" class="w-4 h-4 text-amber-500"></i> Sentiment Predictive Accuracy Scorecard
                     </h3>
-                    <div class="flex-1 mt-4 space-y-4 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar" id="official-news-container">
+                    <div class="grid grid-cols-3 gap-6" id="sentiment-scorecard-container">
                         <!-- Rendered dynamically -->
                     </div>
                 </div>
 
-                <!-- REDDIT DISCUSSION SENTIMENTS -->
-                <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex flex-col">
-                    <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-3 flex items-center gap-2">
-                        <i data-lucide="message-square" class="w-4 h-4 text-amber-500"></i> r/2007scape & YouTube Sentiment
-                    </h3>
-                    <div class="flex-1 mt-4 space-y-4 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar" id="reddit-news-container">
-                        <!-- Rendered dynamically -->
+                <div class="grid grid-cols-2 gap-6">
+                    <!-- GAME UPDATE ARTICLES -->
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex flex-col">
+                        <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-3 flex items-center gap-2">
+                            <i data-lucide="newspaper" class="w-4 h-4 text-amber-500"></i> Jagex Official Update Sentries
+                        </h3>
+                        <div class="flex-1 mt-4 space-y-4 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar" id="official-news-container">
+                            <!-- Rendered dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- REDDIT DISCUSSION SENTIMENTS -->
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex flex-col">
+                        <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-3 flex items-center gap-2">
+                            <i data-lucide="message-square" class="w-4 h-4 text-amber-500"></i> r/2007scape & YouTube Sentiment
+                        </h3>
+                        <div class="flex-1 mt-4 space-y-4 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar" id="reddit-news-container">
+                            <!-- Rendered dynamically -->
+                        </div>
                     </div>
                 </div>
             </section>
@@ -572,6 +622,96 @@
                     </div>
                 </div>
             </section>
+
+            <!-- TAB: WHAT-IF TRACKER -->
+            <section id="tab-whatif-view" class="space-y-6 hidden">
+                <!-- METRIC CARDS -->
+                <div class="grid grid-cols-5 gap-6">
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-5 shadow-xl flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-zinc-550 uppercase tracking-widest">Total Recommendations</p>
+                            <h3 id="whatif-total-trades" class="text-2xl font-bold mt-2 font-mono text-zinc-100">0</h3>
+                        </div>
+                        <div class="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400">
+                            <i data-lucide="list-todo" class="w-5 h-5"></i>
+                        </div>
+                    </div>
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-5 shadow-xl flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-zinc-550 uppercase tracking-widest">Simulated Win Rate</p>
+                            <h3 id="whatif-win-rate" class="text-2xl font-bold mt-2 font-mono text-zinc-100">0.0%</h3>
+                        </div>
+                        <div class="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                            <i data-lucide="percent" class="w-5 h-5"></i>
+                        </div>
+                    </div>
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-5 shadow-xl flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-zinc-550 uppercase tracking-widest">Cumulative Expected Profit</p>
+                            <h3 id="whatif-expected-pnl" class="text-2xl font-bold mt-2 font-mono text-zinc-100">0 gp</h3>
+                        </div>
+                        <div class="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400">
+                            <i data-lucide="target" class="w-5 h-5"></i>
+                        </div>
+                    </div>
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-5 shadow-xl flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-zinc-550 uppercase tracking-widest">Cumulative Actual Profit</p>
+                            <h3 id="whatif-actual-pnl" class="text-2xl font-bold mt-2 font-mono text-zinc-100">0 gp</h3>
+                        </div>
+                        <div class="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500" id="whatif-actual-pnl-bg">
+                            <i data-lucide="trending-up" class="w-5 h-5"></i>
+                        </div>
+                    </div>
+                    <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-5 shadow-xl flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-semibold text-zinc-550 uppercase tracking-widest">Average Profit / Trade</p>
+                            <h3 id="whatif-avg-pnl" class="text-2xl font-bold mt-2 font-mono text-zinc-100">0 gp</h3>
+                        </div>
+                        <div class="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400">
+                            <i data-lucide="calculator" class="w-5 h-5"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PERFORMANCE CHART -->
+                <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl">
+                    <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-4 flex items-center gap-2">
+                        <i data-lucide="line-chart" class="w-4 h-4 text-amber-500"></i> Cumulative Performance Curve (Actual vs Expected)
+                    </h3>
+                    <div class="relative min-h-[350px] mt-4">
+                        <canvas id="whatIfPerformanceChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- SIMULATED TRADES LEDGER -->
+                <div class="bg-zinc-900 border border-zinc-800/80 rounded-xl p-6 shadow-xl flex flex-col">
+                    <h3 class="font-bold text-sm tracking-wider text-zinc-400 uppercase border-b border-zinc-800 pb-4 flex items-center gap-2">
+                        <i data-lucide="table-properties" class="w-4 h-4 text-amber-500"></i> What-If Simulated Trade Ledger
+                    </h3>
+                    <div class="mt-4 overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-left border-collapse text-xs min-w-[900px]">
+                            <thead>
+                                <tr class="text-zinc-500 border-b border-zinc-850">
+                                    <th class="py-3 px-2">Recommendation Date</th>
+                                    <th class="py-3 px-2">Item</th>
+                                    <th class="py-3 px-2 text-right">Quantity</th>
+                                    <th class="py-3 px-2 text-right">Buy Target</th>
+                                    <th class="py-3 px-2 text-right">Actual Sell (GE)</th>
+                                    <th class="py-3 px-2 text-right">OSRS Tax / Unit</th>
+                                    <th class="py-3 px-2 text-right">Expected Profit</th>
+                                    <th class="py-3 px-2 text-right font-semibold">Actual Profit</th>
+                                    <th class="py-3 px-2 text-center">Status</th>
+                                    <th class="py-3 px-2 text-center">Execution Target</th>
+                                </tr>
+                            </thead>
+                            <tbody id="whatif-table-body" class="divide-y divide-zinc-850">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
         </div>
     </main>
 
@@ -702,6 +842,7 @@
         let dashboardData = {};
         let systemSettings = {};
         let priceChart = null;
+        let whatIfChart = null;
         let activeAccountsList = [];
 
         // Formatting utilities
@@ -773,6 +914,7 @@
             document.getElementById('tab-charts-view').classList.add('hidden');
             document.getElementById('tab-settings-view').classList.add('hidden');
             document.getElementById('tab-backtest-view').classList.add('hidden');
+            document.getElementById('tab-whatif-view').classList.add('hidden');
 
             document.getElementById('tab-' + tabId + '-view').classList.remove('hidden');
             
@@ -784,13 +926,16 @@
                 news: 'News Sentiment Analysis',
                 charts: 'Grand Exchange Search & Charts',
                 settings: 'Settings & Multi-Account Configurations',
-                backtest: 'Quantitative Backtest Simulator'
+                backtest: 'Quantitative Backtest Simulator',
+                whatif: 'What-If Recommendation Tracker'
             };
             document.getElementById('current-tab-title').textContent = titles[tabId];
             
             // Re-render sub-components if necessary
             if (tabId === 'news') loadNewsData();
             if (tabId === 'settings') loadSettingsSubtab();
+            if (tabId === 'whatif') loadWhatIfData();
+            if (tabId === 'portfolio') loadLedgerData();
         }
 
         // Subtabs for Settings tab
@@ -894,12 +1039,24 @@
                     const topRecs = data.recommendations.filter(r => !r.skipped && !r.taken).slice(0, 8);
                     
                     if (topRecs.length === 0) {
-                        dashRecBody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-zinc-500 italic">No recommendations found. Run daemon cycle updates.</td></tr>`;
+                        dashRecBody.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-zinc-500 italic">No recommendations found. Run daemon cycle updates.</td></tr>`;
                     }
                     
                     topRecs.forEach(r => {
                         const tr = document.createElement('tr');
                         tr.className = 'hover:bg-zinc-900/40 transition-colors border-b border-zinc-850';
+                        
+                        let ratingBadge = '';
+                        if (r.ml_rating === "STRONG BUY") {
+                            ratingBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">STRONG BUY</span>`;
+                        } else if (r.ml_rating === "BUY") {
+                            ratingBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">BUY</span>`;
+                        } else if (r.ml_rating === "HOLD/NEUTRAL") {
+                            ratingBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-750 text-zinc-400 border border-zinc-700/50">NEUTRAL</span>`;
+                        } else {
+                            ratingBadge = `<span class="text-zinc-500 font-semibold font-mono">Untrained</span>`;
+                        }
+
                         tr.innerHTML = `
                             <td class="py-2.5 font-semibold text-zinc-300">
                                 <div>${r.item}</div>
@@ -908,6 +1065,7 @@
                             <td class="py-2.5 text-right font-mono text-zinc-400">${r.price_each}</td>
                             <td class="py-2.5 text-right font-mono text-zinc-400">${r.expected_return_pct}</td>
                             <td class="py-2.5 text-right font-mono text-emerald-500 font-semibold">${r.expected_profit_gp}</td>
+                            <td class="py-2.5 text-center font-mono">${ratingBadge}</td>
                             <td class="py-2.5 text-center">
                                 <button onclick="openTradeModal(${r.id}, '${r.item.replace(/'/g, "\\'")}', ${r.qty ? r.qty.replace(/,/g, '') : 0}, ${r.price_each ? r.price_each.replace(/,/g, '').replace(' gp', '') : 0}, '${r.side}')" class="bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-zinc-950 px-2.5 py-1 rounded font-bold text-[10px] tracking-wider uppercase transition-all">EXECUTE</button>
                             </td>
@@ -920,7 +1078,7 @@
                     flipsBody.innerHTML = '';
                     const allRecs = data.recommendations;
                     if (allRecs.length === 0) {
-                        flipsBody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-zinc-500 italic">No recommendations available. Run analysis.</td></tr>`;
+                        flipsBody.innerHTML = `<tr><td colspan="11" class="py-8 text-center text-zinc-500 italic">No recommendations available. Run analysis.</td></tr>`;
                     }
                     allRecs.forEach(r => {
                         const tr = document.createElement('tr');
@@ -930,12 +1088,39 @@
                         if (!r.taken && !r.skipped) {
                             actionButtons = `
                                 <div class="flex items-center justify-center gap-1.5">
-                                    <button onclick="openTradeModal(${r.id}, '${r.item.replace(/'/g, "\\'")}', ${r.qty ? r.qty.replace(/,/g, '') : 0}, ${r.price_each ? r.price_each.replace(/,/g, '').replace(' gp', '') : 0}, '${r.side}')" class="bg-amber-500 hover:bg-amber-600 text-zinc-950 px-2.5 py-1 rounded text-[10px] font-bold transition-all uppercase">LOG</button>
-                                    <button onclick="skipRecommendation(${r.id})" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-rose-500 px-2 py-1 rounded text-[10px] font-bold transition-all uppercase">SKIP</button>
+                                     <button onclick="openTradeModal(${r.id}, '${r.item.replace(/'/g, "\\'")}', ${r.qty ? r.qty.replace(/,/g, '') : 0}, ${r.price_each ? r.price_each.replace(/,/g, '').replace(' gp', '') : 0}, '${r.side}')" class="bg-amber-500 hover:bg-amber-600 text-zinc-950 px-2.5 py-1 rounded text-[10px] font-bold transition-all uppercase">LOG</button>
+                                     <button onclick="skipRecommendation(${r.id})" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-rose-500 px-2 py-1 rounded text-[10px] font-bold transition-all uppercase">SKIP</button>
                                 </div>
                             `;
                         } else {
                             actionButtons = `<span class="text-zinc-600 text-[10px] uppercase font-bold tracking-wider">${r.taken ? 'Taken' : 'Skipped'}</span>`;
+                        }
+
+                        let ratingBadge = '';
+                        if (r.ml_rating === "STRONG BUY") {
+                            ratingBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">STRONG BUY</span>`;
+                        } else if (r.ml_rating === "BUY") {
+                            ratingBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">BUY</span>`;
+                        } else if (r.ml_rating === "HOLD/NEUTRAL") {
+                            ratingBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-750 text-zinc-400 border border-zinc-700/50">NEUTRAL</span>`;
+                        } else {
+                            ratingBadge = `<span class="text-zinc-500 font-semibold font-mono">Untrained</span>`;
+                        }
+
+                        let mlConfidence = r.ml_success_probability || 'N/A';
+                        let mlTargetProfit = r.ml_predicted_profit || 'N/A';
+
+                        let mlConfidenceColor = 'text-zinc-400';
+                        if (r.ml_rating === "STRONG BUY") mlConfidenceColor = 'text-emerald-400 font-bold';
+                        else if (r.ml_rating === "BUY") mlConfidenceColor = 'text-amber-400 font-bold';
+
+                        let mlProfitColor = 'text-zinc-400 font-semibold';
+                        if (r.ml_predicted_profit) {
+                            if (r.ml_predicted_profit.startsWith('-')) {
+                                mlProfitColor = 'text-rose-400';
+                            } else if (r.ml_predicted_profit.startsWith('+') && !r.ml_predicted_profit.startsWith('+0')) {
+                                mlProfitColor = 'text-emerald-400 font-semibold';
+                            }
                         }
 
                         tr.innerHTML = `
@@ -949,6 +1134,9 @@
                             <td class="py-3 px-2 text-right font-mono text-zinc-350">${r.reason.includes('Vol:') ? r.reason.split('|')[1].replace('BB:', '').trim() : 'N/A'}</td>
                             <td class="py-3 px-2 text-right font-mono text-zinc-400 max-w-[200px] truncate" title="${r.reason}">${r.reason}</td>
                             <td class="py-3 px-2 text-right font-mono text-emerald-500 font-bold">${r.expected_profit_gp}</td>
+                            <td class="py-3 px-2 text-center font-mono">${ratingBadge}</td>
+                            <td class="py-3 px-2 text-right font-mono ${mlConfidenceColor}">${mlConfidence}</td>
+                            <td class="py-3 px-2 text-right font-mono ${mlProfitColor}">${mlTargetProfit}</td>
                             <td class="py-3 px-2 text-center">${actionButtons}</td>
                         `;
                         flipsBody.appendChild(tr);
@@ -1043,6 +1231,7 @@
                         });
                     }
 
+                    if (activeTab === 'whatif') loadWhatIfData(false);
                     lucide.createIcons();
                     if (showSpinner) document.getElementById('loading-spinner').classList.add('hidden');
                 })
@@ -1072,8 +1261,84 @@
                 });
         }
 
+        // Load sentiment evaluation scorecard
+        function loadSentimentEvaluation() {
+            fetch('/api/sentiment/evaluation')
+                .then(res => res.json())
+                .then(data => {
+                    const container = document.getElementById('sentiment-scorecard-container');
+                    if (!container) return;
+                    container.innerHTML = '';
+
+                    const sources = [
+                        { key: 'news', title: 'Jagex Official News', icon: 'newspaper', colorClass: 'text-amber-500' },
+                        { key: 'reddit', title: 'r/2007scape Discussions', icon: 'message-square', colorClass: 'text-orange-500' },
+                        { key: 'youtube', title: 'YouTube Video Sentiment', icon: 'youtube', colorClass: 'text-red-500' }
+                    ];
+
+                    sources.forEach(src => {
+                        const stats = data[src.key] || {
+                            count: 0,
+                            accuracy_3d: 0.0,
+                            accuracy_7d: 0.0,
+                            mean_return_up_3d: 0.0,
+                            mean_return_down_3d: 0.0,
+                            mean_return_up_7d: 0.0,
+                            mean_return_down_7d: 0.0
+                        };
+
+                        const div = document.createElement('div');
+                        div.className = 'bg-zinc-950 border border-zinc-850/60 rounded-xl p-5 shadow-inner flex flex-col gap-4';
+                        
+                        let acc7dColor = 'text-zinc-400';
+                        if (stats.accuracy_7d >= 60) acc7dColor = 'text-emerald-400 font-bold';
+                        else if (stats.accuracy_7d >= 50) acc7dColor = 'text-amber-500 font-bold';
+                        else if (stats.accuracy_7d > 0) acc7dColor = 'text-rose-500 font-bold';
+
+                        let acc3dColor = 'text-zinc-400';
+                        if (stats.accuracy_3d >= 60) acc3dColor = 'text-emerald-400 font-bold';
+                        else if (stats.accuracy_3d >= 50) acc3dColor = 'text-amber-500 font-bold';
+                        else if (stats.accuracy_3d > 0) acc3dColor = 'text-rose-500 font-bold';
+
+                        div.innerHTML = `
+                            <div class="flex items-center justify-between border-b border-zinc-900 pb-2">
+                                <div class="flex items-center gap-2">
+                                    <i data-lucide="${src.icon}" class="w-4 h-4 ${src.colorClass}"></i>
+                                    <span class="font-bold text-xs uppercase tracking-wider text-zinc-300">${src.title}</span>
+                                </div>
+                                <span class="text-[10px] font-mono text-zinc-500 uppercase font-semibold">N = ${stats.count}</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="flex flex-col justify-center items-center bg-zinc-900/40 border border-zinc-850/30 rounded-lg p-2">
+                                    <span class="text-[10px] text-zinc-500 uppercase font-bold tracking-wider mb-1">3d Accuracy</span>
+                                    <span class="text-lg font-mono font-bold ${acc3dColor}">${stats.accuracy_3d.toFixed(1)}%</span>
+                                </div>
+                                <div class="flex flex-col justify-center items-center bg-zinc-900/40 border border-zinc-850/30 rounded-lg p-2">
+                                    <span class="text-[10px] text-zinc-500 uppercase font-bold tracking-wider mb-1">7d Accuracy</span>
+                                    <span class="text-lg font-mono font-bold ${acc7dColor}">${stats.accuracy_7d.toFixed(1)}%</span>
+                                </div>
+                            </div>
+                            <div class="space-y-1.5 text-[11px] text-zinc-400 border-t border-zinc-900 pt-2 font-mono">
+                                <div class="flex justify-between">
+                                    <span>Mean Up Return (3d/7d):</span>
+                                    <span class="text-emerald-400 font-semibold">+${stats.mean_return_up_3d.toFixed(2)}% / +${stats.mean_return_up_7d.toFixed(2)}%</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Mean Down Return (3d/7d):</span>
+                                    <span class="text-rose-400 font-semibold">${stats.mean_return_down_3d.toFixed(2)}% / ${stats.mean_return_down_7d.toFixed(2)}%</span>
+                                </div>
+                            </div>
+                        `;
+                        container.appendChild(div);
+                    });
+                    lucide.createIcons();
+                })
+                .catch(err => console.error('Error loading sentiment evaluation:', err));
+        }
+
         // Fetch news and Reddit posts
         function loadNewsData() {
+            loadSentimentEvaluation();
             fetch('/api/news')
                 .then(res => res.json())
                 .then(data => {
@@ -1688,6 +1953,187 @@
                 alert('Backtest execution failed: ' + err);
                 document.getElementById('loading-spinner').classList.add('hidden');
             });
+        }
+
+        // What-If Tracker Data Loader & Chart Drawer
+        function loadWhatIfData(showSpinner = true) {
+            if (showSpinner) document.getElementById('loading-spinner').classList.remove('hidden');
+            
+            fetch('/api/whatif')
+                .then(res => res.json())
+                .then(data => {
+                    // 1. Populate Metrics Cards
+                    document.getElementById('whatif-total-trades').textContent = data.summary.total_trades.toLocaleString();
+                    document.getElementById('whatif-win-rate').textContent = data.summary.win_rate + '%';
+                    
+                    const expectedPnl = data.summary.cumulative_expected_profit;
+                    const actualPnl = data.summary.cumulative_actual_profit;
+                    const avgPnl = data.summary.avg_actual_profit;
+                    
+                    document.getElementById('whatif-expected-pnl').textContent = formatGP(expectedPnl);
+                    
+                    const actualPnlEl = document.getElementById('whatif-actual-pnl');
+                    const actualPnlBg = document.getElementById('whatif-actual-pnl-bg');
+                    actualPnlEl.textContent = formatGP(actualPnl);
+                    
+                    if (actualPnl >= 0) {
+                        actualPnlEl.className = 'text-2xl font-bold mt-2 font-mono text-emerald-500';
+                        actualPnlBg.className = 'w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500';
+                        actualPnlBg.innerHTML = '<i data-lucide="trending-up" class="w-5 h-5"></i>';
+                    } else {
+                        actualPnlEl.className = 'text-2xl font-bold mt-2 font-mono text-rose-500';
+                        actualPnlBg.className = 'w-10 h-10 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-500';
+                        actualPnlBg.innerHTML = '<i data-lucide="trending-down" class="w-5 h-5"></i>';
+                    }
+                    
+                    document.getElementById('whatif-avg-pnl').textContent = formatGP(avgPnl);
+                    
+                    // 2. Render Trade Ledger Table
+                    const tableBody = document.getElementById('whatif-table-body');
+                    tableBody.innerHTML = '';
+                    
+                    if (data.trades.length === 0) {
+                        tableBody.innerHTML = `<tr><td colspan="10" class="py-8 text-center text-zinc-550 italic">No pure flip recommendations have been simulated. Run an update cycle first.</td></tr>`;
+                    }
+                    
+                    data.trades.forEach(t => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'hover:bg-zinc-900/40 border-b border-zinc-850';
+                        
+                        const actualProfitClass = t.actual_profit >= 0 ? 'text-emerald-500 font-bold' : 'text-rose-500 font-bold';
+                        const expectedProfitClass = t.expected_profit >= 0 ? 'text-emerald-600/80 font-mono' : 'text-rose-600/80 font-mono';
+                        const statusClass = t.status === 'Realized' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-500 border border-amber-500/20';
+                        
+                        tr.innerHTML = `
+                            <td class="py-3 px-2 text-zinc-500 font-mono text-[10px]">${t.created_at}</td>
+                            <td class="py-3 px-2 font-bold text-zinc-200">${t.item_name}</td>
+                            <td class="py-3 px-2 text-right font-mono">${t.qty.toLocaleString()}</td>
+                            <td class="py-3 px-2 text-right font-mono text-zinc-400">${t.buy_price.toLocaleString()} gp</td>
+                            <td class="py-3 px-2 text-right font-mono text-zinc-400">${t.sell_price.toLocaleString()} gp</td>
+                            <td class="py-3 px-2 text-right font-mono text-zinc-500">${Math.round(t.tax_each).toLocaleString()} gp</td>
+                            <td class="py-3 px-2 text-right ${expectedProfitClass}">${t.expected_profit >= 0 ? '+' : ''}${Math.round(t.expected_profit).toLocaleString()} gp</td>
+                            <td class="py-3 px-2 text-right ${actualProfitClass}">${t.actual_profit >= 0 ? '+' : ''}${Math.round(t.actual_profit).toLocaleString()} gp</td>
+                            <td class="py-3 px-2 text-center">
+                                <span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase ${statusClass}">${t.status}</span>
+                            </td>
+                            <td class="py-3 px-2 text-center text-zinc-500 text-[10px] font-mono">${t.sold_at}</td>
+                        `;
+                        tableBody.appendChild(tr);
+                    });
+                    
+                    // 3. Render Chart.js line chart
+                    const chartLabels = [];
+                    const actualCurve = [];
+                    const expectedCurve = [];
+                    
+                    let cumActual = 0;
+                    let cumExpected = 0;
+                    
+                    data.trades.forEach((t, i) => {
+                        cumActual += t.actual_profit;
+                        cumExpected += t.expected_profit;
+                        actualCurve.push(cumActual);
+                        expectedCurve.push(cumExpected);
+                        chartLabels.push(t.created_at.split(' ')[0] + ` (#${i+1})`);
+                    });
+                    
+                    const ctx = document.getElementById('whatIfPerformanceChart').getContext('2d');
+                    if (whatIfChart) whatIfChart.destroy();
+                    
+                    whatIfChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: chartLabels,
+                            datasets: [
+                                {
+                                    label: 'Cumulative Actual Profit',
+                                    data: actualCurve,
+                                    borderColor: '#10b981', // emerald-500
+                                    backgroundColor: 'rgba(16, 185, 129, 0.05)',
+                                    borderWidth: 2.5,
+                                    pointRadius: chartLabels.length > 50 ? 0 : 2,
+                                    fill: true,
+                                    tension: 0.15
+                                },
+                                {
+                                    label: 'Cumulative Expected Profit',
+                                    data: expectedCurve,
+                                    borderColor: '#dfb43a', // gold
+                                    borderDash: [5, 5],
+                                    borderWidth: 1.5,
+                                    pointRadius: chartLabels.length > 50 ? 0 : 2,
+                                    fill: false,
+                                    tension: 0.15
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: {
+                                intersect: false,
+                                mode: 'index'
+                            },
+                            scales: {
+                                x: {
+                                    grid: { color: '#1a1a20' },
+                                    ticks: { color: '#888', maxTicksLimit: 12 }
+                                },
+                                y: {
+                                    grid: { color: '#1a1a20' },
+                                    ticks: {
+                                        color: '#888',
+                                        callback: function(value) {
+                                            if (value >= 1e9 || value <= -1e9) return (value / 1e9).toFixed(1) + 'B gp';
+                                            if (value >= 1e6 || value <= -1e6) return (value / 1e6).toFixed(1) + 'M gp';
+                                            return value.toLocaleString() + ' gp';
+                                        }
+                                    }
+                                }
+                            },
+                            plugins: {
+                                legend: {
+                                    display: true,
+                                    position: 'top',
+                                    labels: {
+                                        color: '#d4d4d8',
+                                        font: { size: 11, weight: 'bold' }
+                                    }
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            let label = context.dataset.label || '';
+                                            if (label) label += ': ';
+                                            if (context.parsed.y !== null) {
+                                                label += (context.parsed.y >= 0 ? '+' : '') + context.parsed.y.toLocaleString() + ' gp';
+                                            }
+                                            return label;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    
+                    lucide.createIcons();
+                    if (showSpinner) document.getElementById('loading-spinner').classList.add('hidden');
+                })
+                .catch(err => {
+                    console.error('Error fetching What-If details:', err);
+                    if (showSpinner) document.getElementById('loading-spinner').classList.add('hidden');
+                });
+        }
+
+        function loadLedgerData() {
+            fetch('/api/ledger')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('port-total-cash').textContent = formatGP(data.total_cash);
+                    document.getElementById('port-total-assets').textContent = formatGP(data.total_holdings_value);
+                    document.getElementById('port-total-networth').textContent = formatGP(data.total_net_worth);
+                })
+                .catch(err => console.error('Error fetching ledger details:', err));
         }
     </script>
 </body>

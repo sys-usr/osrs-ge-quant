@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Dict, List, Any, Tuple
 
 import numpy as np
@@ -19,9 +19,11 @@ from ..models import PricePoint, Item
 def load_price_history(
     years: int = 3,
     timestep: str = "1d_weirdgloop",
+    start_date: datetime = None,
+    end_date: datetime = None,
 ) -> pd.DataFrame:
     """
-    Load multi-year price history for all items at the given timestep and
+    Load price history for all items at the given timestep and
     return a tidy DataFrame with price + volume.
 
     Columns:
@@ -29,17 +31,22 @@ def load_price_history(
     """
     session = get_session()
 
-    max_ts = (
-        session.query(func.max(PricePoint.ts))
-        .filter(PricePoint.timestep == timestep)
-        .scalar()
-    )
+    if start_date is not None and end_date is not None:
+        start_ts = start_date
+        end_ts = end_date
+    else:
+        max_ts = (
+            session.query(func.max(PricePoint.ts))
+            .filter(PricePoint.timestep == timestep)
+            .scalar()
+        )
 
-    if max_ts is None:
-        session.close()
-        return pd.DataFrame()
+        if max_ts is None:
+            session.close()
+            return pd.DataFrame()
 
-    start_ts = max_ts - timedelta(days=365 * years)
+        start_ts = max_ts - timedelta(days=365 * years)
+        end_ts = max_ts
 
     rows = (
         session.query(
@@ -53,6 +60,7 @@ def load_price_history(
         .filter(
             PricePoint.timestep == timestep,
             PricePoint.ts >= start_ts,
+            PricePoint.ts <= end_ts,
         )
         .all()
     )
@@ -142,6 +150,8 @@ def backtest_flip_strategy(
     position_fraction: float = 0.05,
     fee_rate: float = 0.01,
     top_n: int = 300,
+    start_date: datetime = None,
+    end_date: datetime = None,
 ) -> Dict[str, Any]:
     """
     Main mean-reversion flip backtest.
@@ -176,7 +186,7 @@ def backtest_flip_strategy(
         f"fee_rate={cfg.fee_rate} top_n={cfg.top_n}"
     )
 
-    df = load_price_history(years=cfg.years, timestep=cfg.timestep)
+    df = load_price_history(years=cfg.years, timestep=cfg.timestep, start_date=start_date, end_date=end_date)
     if df.empty:
         print("[BT] no price history, abort.")
         return {"error": "No price history available.", "config": asdict(cfg)}
